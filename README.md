@@ -28,16 +28,16 @@ python3 -m venv .venv
 
 ## Usage
 
-Dry, small discovery run:
+Small full discovery run:
 
 ```bash
-python -m src.main --limit-queries 10 --output output/companies
+python -m src.main --limit-queries 10 --output output/campania_targets
 ```
 
-Discovery plus website profiling:
+Fast search-only run:
 
 ```bash
-python -m src.main --limit-queries 10 --profile --output output/companies
+python -m src.main --limit-queries 10 --no-profile --output output/campania_targets
 ```
 
 SerpAPI is configured but disabled by default. To use it, enable `serpapi` in `configs/search_engines.yaml` and set:

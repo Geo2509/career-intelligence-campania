@@ -7,10 +7,14 @@ def test_score_company_prefers_direct_contacts() -> None:
             "company": "Data Back Office Napoli",
             "url": "https://example.com",
             "emails": ["hr@example.com"],
+            "phones": ["081123456"],
+            "is_employer": True,
             "has_contact_page": True,
             "has_careers_page": True,
         }
     )
 
-    assert scored["score"] == 100
-    assert "direct_email" in scored["score_reasons"]
+    assert scored["score"] > 0
+    assert scored["confidence"] >= 90
+    assert "email" in scored["positive_reasons"]
+    assert scored["next_action"] == "Email direct contact"

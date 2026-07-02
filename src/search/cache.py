@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from .base import SearchResult, utc_now
+
+
+class SearchCache:
+    def __init__(self, path: str | Path, ttl_hours: int = 168, enabled: bool = True) -> None:
+        self.path = Path(path)
+        self.ttl = timedelta(hours=ttl_hours)
+        self.enabled = enabled
+        self._records = self._load()
+
+    def _load(self) -> dict[str, list[dict]]:
+        if not self.enabled or not self.path.exists():
+            return {}
+        try:
+            data = json.loads(self.path.read_text())
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(data, dict):
+            return {str(key): value for key, value in data.items() if isinstance(value, list)}
+        return {}
+
+    def _key(self, query: str, engine: str) -> str:
+        return f"{engine}::{query}"
+
+    def get(self, query: str, engine: str) -> list[SearchResult] | None:
+        if not self.enabled:
+            return None
+        records = self._records.get(self._key(query, engine))
+        if not records:
+            return None
+        timestamp = records[0].get("timestamp", "")
+        try:
+            created_at = datetime.fromisoformat(timestamp)
+        except ValueError:
+            return None
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - created_at > self.ttl:
+            return None
+        return [
+            SearchResult(
+                query=record.get("query", query),
+                title=record.get("title", ""),
+                url=record.get("url", ""),
+                snippet=record.get("snippet", ""),
+                source=record.get("engine", engine),
+                timestamp=record.get("timestamp", timestamp),
+            )
+            for record in records
+        ]
+
+    def set(self, query: str, engine: str, results: list[SearchResult]) -> None:
+        if not self.enabled:
+            return
+        timestamp = utc_now()
+        self._records[self._key(query, engine)] = [
+            {
+                "query": result.query,
+                "engine": engine,
+                "title": result.title,
+                "url": result.url,
+                "snippet": result.snippet,
+                "timestamp": timestamp,
+            }
+            for result in results
+        ]
+
+    def save(self) -> None:
+        if not self.enabled:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(self._records, ensure_ascii=False, indent=2))

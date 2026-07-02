@@ -4,3 +4,4 @@ ddgs
 PyYAML
 openpyxl
 beautifulsoup4
+pytest
