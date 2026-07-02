@@ -1,0 +1,12 @@
+intents:
+  employer_direct:
+    templates:
+      - "{role} aziende {location} contatti"
+      - "{role} società {location} lavora con noi"
+      - "{role} {location} email azienda"
+      - "site:.it {role} {location} \"contatti\""
+  contact_pages:
+    templates:
+      - "{role} {location} \"contatti\""
+      - "{role} {location} \"chi siamo\""
+      - "{role} {location} \"lavora con noi\""

@@ -1,0 +1,6 @@
+pandas
+requests
+ddgs
+PyYAML
+openpyxl
+beautifulsoup4
