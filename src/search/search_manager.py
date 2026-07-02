@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import yaml
 
@@ -65,18 +66,26 @@ class SearchManager:
     def search_many(self, queries: Iterable[str]) -> list[SearchResult]:
         return self.run(queries).results
 
-    def run(self, queries: Iterable[str]) -> SearchRun:
+    def run(self, queries: Iterable[str], progress: Callable[[str], None] | None = None) -> SearchRun:
         query_list = list(queries)
         stats = SearchStats(queries_generated=len(query_list))
         results: list[SearchResult] = []
 
-        for query in query_list:
+        if progress:
+            progress(f"Generated queries: {len(query_list)}")
+
+        for index, query in enumerate(query_list, start=1):
+            if progress:
+                progress("")
+                progress(f"[{index}/{len(query_list)}] {query}")
             for client, max_results in self.clients:
                 cached = self.cache.get(query, client.name) if self.cache else None
                 if cached is not None:
                     stats.cache_hits += 1
                     stats.record_results(client.name, len(cached))
                     results.extend(cached)
+                    if progress:
+                        progress(f"  {engine_label(client.name)}: {len(cached)} results (cache)")
                     continue
 
                 stats.cache_misses += 1
@@ -90,6 +99,10 @@ class SearchManager:
                 last_error = getattr(client, "last_error", "")
                 if last_error and not engine_results:
                     stats.record_error(client.name, query, last_error)
+                    if progress:
+                        progress(f"  {engine_label(client.name)}: 0 results ({last_error})")
+                elif progress:
+                    progress(f"  {engine_label(client.name)}: {len(engine_results)} results")
 
                 stats.record_results(client.name, len(engine_results))
                 results.extend(engine_results)
@@ -110,3 +123,11 @@ def build_search_manager(config_path: str | Path) -> SearchManager:
         enabled=bool(cache_config.get("enabled", True)),
     )
     return SearchManager(load_search_clients(config_path), cache=cache)
+
+
+def engine_label(name: str) -> str:
+    labels = {
+        "duckduckgo": "DDG",
+        "serpapi": "SerpAPI",
+    }
+    return labels.get(name, name)

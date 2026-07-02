@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import time
+from typing import Callable
 
 import yaml
 
@@ -57,34 +58,52 @@ def run(
     output_base: str,
     search_engines_path: str = "configs/search_engines.yaml",
     history_path: str = "history/companies_history.json",
+    verbose: bool = False,
 ) -> tuple[list[dict], RunStats]:
     started = time.monotonic()
-    search_run = discover_search_results(search_engines_path=search_engines_path, limit_queries=limit_queries)
+    progress = print if verbose else None
+    search_run = discover_search_results(
+        search_engines_path=search_engines_path,
+        limit_queries=limit_queries,
+        progress=progress,
+    )
     raw_results = [result.to_dict() for result in search_run.results]
     search_stats = search_run.stats
 
+    log(progress, "")
+    log(progress, "Filtering aggregators...")
     companies = extract_companies(
         raw_results,
         negative_keywords=load_negative_keywords(),
         aggregators=load_aggregators(),
     )
     after_filter = len(companies)
+    log(progress, f"Remaining companies: {after_filter}")
+
+    log(progress, "Deduplicating companies...")
     companies = dedupe_companies(companies)
     companies = filter_valid_employers(companies, allow_unconfirmed=True)
+    log(progress, f"Unique companies: {len(companies)}")
 
     if profile:
         profiled = []
-        for company in companies:
+        for index, company in enumerate(companies, start=1):
+            log(progress, f"Profiling company {index}/{len(companies)}: {company.get('domain', company.get('company', ''))}")
             profile_data = profile_website(company.get("website") or company["url"]).to_dict()
             profiled.append(validate_employer({**company, **profile_data}))
         companies = profiled
     else:
+        log(progress, "Skipping website profiling (--no-profile).")
         companies = [validate_employer(company) for company in companies]
 
+    log(progress, "Analysing employer intelligence...")
     companies = enrich_companies(companies)
+    log(progress, "Scoring companies...")
     scored = score_companies(companies)
     with_history = update_history(scored, history_path)
+    log(progress, "Exporting Excel...")
     export_records(with_history, output_base)
+    log(progress, "Done.")
     run_stats = RunStats(
         queries_generated=search_stats.queries_generated,
         queries_executed=search_stats.queries_executed,
@@ -125,6 +144,11 @@ def run(
     return with_history, run_stats
 
 
+def log(progress: Callable[[str], None] | None, message: str) -> None:
+    if progress:
+        progress(message)
+
+
 def print_run_stats(stats: RunStats) -> None:
     print(f"Queries generated: {stats.queries_generated}")
     print(f"Queries executed: {stats.queries_executed}")
@@ -162,9 +186,17 @@ def main() -> None:
     parser.add_argument("--output", default="output/campania_targets")
     parser.add_argument("--search-config", default="configs/search_engines.yaml")
     parser.add_argument("--history", default="history/companies_history.json")
+    parser.add_argument("--quiet", action="store_true", help="Hide live progress output.")
     args = parser.parse_args()
 
-    records, stats = run(args.limit_queries, args.profile, args.output, args.search_config, args.history)
+    records, stats = run(
+        args.limit_queries,
+        args.profile,
+        args.output,
+        args.search_config,
+        args.history,
+        verbose=not args.quiet,
+    )
     print(f"Exported {len(records)} companies to {args.output}.json/.csv/.xlsx")
     print_run_stats(stats)
 
