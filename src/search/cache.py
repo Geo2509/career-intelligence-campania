@@ -7,11 +7,22 @@ from pathlib import Path
 from .base import SearchResult, utc_now
 
 
+CACHE_VERSION = 1
+
+
 class SearchCache:
-    def __init__(self, path: str | Path, ttl_hours: int = 168, enabled: bool = True) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        ttl_hours: int = 168,
+        enabled: bool = True,
+        discovery_hash: str = "",
+    ) -> None:
         self.path = Path(path)
         self.ttl = timedelta(hours=ttl_hours)
         self.enabled = enabled
+        self.discovery_hash = discovery_hash
+        self.discovery_version = CACHE_VERSION
         self._records = self._load()
 
     def _load(self) -> dict[str, list[dict]]:
@@ -21,8 +32,17 @@ class SearchCache:
             data = json.loads(self.path.read_text())
         except json.JSONDecodeError:
             return {}
-        if isinstance(data, dict):
-            return {str(key): value for key, value in data.items() if isinstance(value, list)}
+        if not isinstance(data, dict):
+            return {}
+
+        version = data.get("discovery_version")
+        hash_value = data.get("discovery_hash")
+        if version != self.discovery_version or hash_value != self.discovery_hash:
+            return {}
+
+        records = data.get("records", {})
+        if isinstance(records, dict):
+            return {str(key): value for key, value in records.items() if isinstance(value, list)}
         return {}
 
     def _key(self, query: str, engine: str) -> str:
@@ -50,6 +70,7 @@ class SearchCache:
                 url=record.get("url", ""),
                 snippet=record.get("snippet", ""),
                 source=record.get("engine", engine),
+                strategy=record.get("strategy", ""),
                 timestamp=record.get("timestamp", timestamp),
             )
             for record in records
@@ -63,6 +84,7 @@ class SearchCache:
             {
                 "query": result.query,
                 "engine": engine,
+                "strategy": result.strategy,
                 "title": result.title,
                 "url": result.url,
                 "snippet": result.snippet,
@@ -75,4 +97,14 @@ class SearchCache:
         if not self.enabled:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self._records, ensure_ascii=False, indent=2))
+        self.path.write_text(
+            json.dumps(
+                {
+                    "discovery_version": self.discovery_version,
+                    "discovery_hash": self.discovery_hash,
+                    "records": self._records,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -10,6 +10,7 @@ import yaml
 from .base import SearchClient, SearchResult, SearchStats
 from .cache import SearchCache
 from .duckduckgo import DuckDuckGoSearchClient
+from ..query_generator import DiscoveryQuery
 from .serpapi import SerpApiSearchClient
 
 
@@ -17,6 +18,9 @@ from .serpapi import SerpApiSearchClient
 class SearchRun:
     results: list[SearchResult]
     stats: SearchStats
+    all_queries: list[DiscoveryQuery] = field(default_factory=list)
+    executed_queries: list[DiscoveryQuery] = field(default_factory=list)
+    discovery_hash: str = ""
 
 
 def load_search_config(config_path: str | Path) -> dict:
@@ -74,53 +78,69 @@ class SearchManager:
         if progress:
             progress(f"Generated queries: {len(query_list)}")
 
-        for index, query in enumerate(query_list, start=1):
+        for index, query_item in enumerate(query_list, start=1):
+            query_text = getattr(query_item, "query", str(query_item))
+            strategy = getattr(query_item, "strategy", "")
+            stats.record_strategy_query(strategy)
+
             if progress:
                 progress("")
-                progress(f"[{index}/{len(query_list)}] {query}")
+                progress(f"[{index}/{len(query_list)}] {query_text}")
             for client, max_results in self.clients:
-                cached = self.cache.get(query, client.name) if self.cache else None
+                stats.query_results.setdefault(query_text, 0)
+                stats.query_strategy_map[query_text] = strategy
+                cached = self.cache.get(query_text, client.name) if self.cache else None
                 if cached is not None:
-                    stats.cache_hits += 1
+                    stats.record_cache_hit(strategy)
+                    stats.record_strategy_executed(strategy)
+                    stats.record_cached_query(query_text)
                     stats.record_results(client.name, len(cached))
+                    stats.record_strategy_result(strategy, len(cached))
+                    stats.query_results[query_text] += len(cached)
+                    cached = [result.with_strategy(strategy) if strategy else result for result in cached]
                     results.extend(cached)
                     if progress:
                         progress(f"  {engine_label(client.name)}: {len(cached)} results (cache)")
                     continue
 
-                stats.cache_misses += 1
+                stats.record_cache_miss(strategy)
+                stats.record_live_query(query_text)
                 stats.queries_executed += 1
+                stats.record_strategy_executed(strategy)
                 try:
-                    engine_results = list(client.search(query, max_results=max_results))
+                    engine_results = list(client.search(query_text, max_results=max_results))
                 except Exception as exc:
-                    stats.record_error(client.name, query, str(exc))
+                    stats.record_error(client.name, query_text, str(exc))
                     continue
 
+                engine_results = [result.with_strategy(strategy) for result in engine_results]
                 last_error = getattr(client, "last_error", "")
                 if last_error and not engine_results:
-                    stats.record_error(client.name, query, last_error)
+                    stats.record_error(client.name, query_text, last_error)
                     if progress:
                         progress(f"  {engine_label(client.name)}: 0 results ({last_error})")
                 elif progress:
                     progress(f"  {engine_label(client.name)}: {len(engine_results)} results")
 
                 stats.record_results(client.name, len(engine_results))
+                stats.record_strategy_result(strategy, len(engine_results))
                 results.extend(engine_results)
                 if self.cache is not None:
-                    self.cache.set(query, client.name, engine_results)
+                    self.cache.set(query_text, client.name, engine_results)
 
         if self.cache is not None:
             self.cache.save()
         return SearchRun(results=results, stats=stats)
 
 
-def build_search_manager(config_path: str | Path) -> SearchManager:
+def build_search_manager(config_path: str | Path, discovery_hash: str) -> SearchManager:
     config = load_search_config(config_path)
     cache_config = config.get("cache", {})
     cache = SearchCache(
         cache_config.get("path", "output/cache/search_results.json"),
         ttl_hours=int(cache_config.get("ttl_hours", 168)),
         enabled=bool(cache_config.get("enabled", True)),
+        discovery_hash=discovery_hash,
     )
     return SearchManager(load_search_clients(config_path), cache=cache)
 

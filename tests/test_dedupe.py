@@ -8,5 +8,10 @@ def test_dedupe_companies_by_domain() -> None:
     ]
 
     assert dedupe_companies(companies) == [
-        {"company": "A", "url": "https://example.com/", "domain": "example.com"}
+        {
+            "company": "A",
+            "url": "https://example.com/",
+            "domain": "example.com",
+            "discovery_confidence": 0,
+        }
     ]

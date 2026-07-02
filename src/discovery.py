@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .query_generator import generate_queries
+from .query_generator import DiscoveryQuery, build_discovery_hash, generate_queries
 from .search.search_manager import SearchRun, build_search_manager
 
 
@@ -18,9 +18,15 @@ def discover_search_results(
     limit_queries: int | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> SearchRun:
-    queries = generate_queries()
-    if limit_queries is not None:
-        queries = queries[:limit_queries]
+    all_queries, discovery_hash = generate_queries()
+    executed_queries = all_queries[:limit_queries] if limit_queries is not None else all_queries
 
-    manager = build_search_manager(search_engines_path)
-    return manager.run(queries, progress=progress)
+    manager = build_search_manager(search_engines_path, discovery_hash)
+    run = manager.run(executed_queries, progress=progress)
+    return SearchRun(
+        results=run.results,
+        stats=run.stats,
+        all_queries=all_queries,
+        executed_queries=executed_queries,
+        discovery_hash=discovery_hash,
+    )

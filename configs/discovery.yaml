@@ -1,0 +1,50 @@
+strategies:
+  company_website_search:
+    enabled: true
+    priority: 100
+    limit: 20
+    templates:
+      - "site:.it {role} {location} contatti"
+      - "site:.it {role} {location} \"lavora con noi\""
+      - "site:.it {role} {location} \"chi siamo\""
+      - "site:.it {role} {location} \"posizioni aperte\""
+  role_search:
+    enabled: true
+    priority: 90
+    limit: 25
+    templates:
+      - "{role} {location} contatti"
+      - "{role} {location} \"lavora con noi\""
+      - "{role} {location} \"chi siamo\""
+  career_search:
+    enabled: true
+    priority: 80
+    limit: 20
+    templates:
+      - "{role} {location} \"posizioni aperte\""
+      - "{role} {location} \"lavora con noi\""
+      - "{role} {location} \"carriera\""
+  business_search:
+    enabled: true
+    priority: 70
+    limit: 20
+    templates:
+      - "{role} azienda {location}"
+      - "{role} società {location}"
+      - "{role} impresa {location}"
+  service_search:
+    enabled: true
+    priority: 60
+    limit: 15
+    templates:
+      - "{role} servizi aziendali {location}"
+      - "{role} soluzioni aziendali {location}"
+      - "{role} consulenza {location}"
+  logistics_search:
+    enabled: true
+    priority: 50
+    limit: 15
+    templates:
+      - "{role} logistica {location}"
+      - "{role} logistica {location} contatti"
+      - "{role} trasporto merci {location}"

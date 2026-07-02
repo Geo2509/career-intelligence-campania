@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -10,7 +10,7 @@ from typing import Callable
 
 import yaml
 
-from .company_extractor import extract_companies, load_aggregators
+from .company_extractor import extract_companies, is_aggregator, load_aggregators
 from .company_extractor import excluded_domain_type, load_excluded_domain_classes
 from .dedupe import dedupe_companies
 from .discovery import discover_search_results
@@ -18,7 +18,9 @@ from .employer_intelligence import enrich_companies
 from .employer_validator import filter_valid_employers, validate_employer
 from .export import export_records
 from .history import update_history
+from .query_generator import build_discovery_hash, generate_queries
 from .scorer import score_companies
+from .search.cache import CACHE_VERSION
 from .website_profiler import profile_website
 
 
@@ -39,6 +41,8 @@ class RunStats:
     search_errors: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
+    queries_by_strategy: dict[str, int] = field(default_factory=dict)
+    results_by_strategy: dict[str, int] = field(default_factory=dict)
     companies_analysed: int = 0
     industries_detected: int = 0
     logistics_companies: int = 0
@@ -57,6 +61,16 @@ def load_negative_keywords(path: str = "configs/negative_keywords.yaml") -> list
     return (yaml.safe_load(Path(path).read_text()) or {}).get("negative_keywords", [])
 
 
+def discovery_confidence_level(confidence: int) -> str:
+    if confidence >= 80:
+        return "High"
+    if confidence >= 60:
+        return "Medium"
+    if confidence >= 40:
+        return "Low"
+    return "Ignore"
+
+
 def run(
     limit_queries: int | None,
     profile: bool,
@@ -65,7 +79,7 @@ def run(
     history_path: str = "history/companies_history.json",
     verbose: bool = False,
     max_profile_companies: int | None = None,
-    profile_only_qualified: bool = False,
+    profile_only_qualified: bool | None = False,
     profile_timeout: int = 15,
 ) -> tuple[list[dict], RunStats]:
     started = time.monotonic()
@@ -77,6 +91,9 @@ def run(
     )
     raw_results = [result.to_dict() for result in search_run.results]
     search_stats = search_run.stats
+    discovery_hash = search_run.discovery_hash
+    all_queries = search_run.all_queries
+    executed_queries = search_run.executed_queries
 
     log(progress, "")
     log(progress, "Filtering aggregators...")
@@ -157,6 +174,8 @@ def run(
         search_errors=search_stats.search_errors,
         cache_hits=search_stats.cache_hits,
         cache_misses=search_stats.cache_misses,
+        queries_by_strategy=search_stats.queries_by_strategy,
+        results_by_strategy=search_stats.results_by_strategy,
         companies_analysed=len(companies),
         industries_detected=sum(1 for company in companies if company.get("industry") and company.get("industry") != "Unknown"),
         logistics_companies=sum(1 for company in companies if company.get("logistics_score", 0) > 0),
@@ -170,6 +189,51 @@ def run(
         profile_time_total=profile_time_total,
         profile_time_average=profile_time_average,
     )
+
+    run_metadata = {
+        "generated_queries": len(all_queries),
+        "executed_queries": len(executed_queries),
+        "cached_queries": search_stats.cached_queries,
+        "live_queries": search_stats.live_queries,
+        "cache_hits": search_stats.cache_hits,
+        "cache_misses": search_stats.cache_misses,
+        "raw_results": len(raw_results),
+        "unique_companies": run_stats.unique_companies,
+        "profiled_companies": run_stats.profiled_companies,
+        "run_duration": run_stats.run_duration,
+    }
+    Path("output").mkdir(parents=True, exist_ok=True)
+    Path("output/run_metadata.json").write_text(json.dumps(run_metadata, ensure_ascii=False, indent=2))
+
+    raw_query_counts: dict[str, int] = {}
+    for result in raw_results:
+        raw_query = result.get("query", "")
+        if raw_query:
+            raw_query_counts[raw_query] = raw_query_counts.get(raw_query, 0) + 1
+
+    company_query_counts: dict[str, int] = {}
+    for company in companies:
+        query = company.get("query", "")
+        if query:
+            company_query_counts[query] = company_query_counts.get(query, 0) + 1
+
+    queries_with_zero_results = [query for query, count in search_stats.query_results.items() if count == 0]
+    queries_with_only_excluded_domains = sorted(
+        query for query, raw_count in raw_query_counts.items() if raw_count > 0 and company_query_counts.get(query, 0) == 0
+    )
+
+    all_generated_queries, _ = generate_queries()
+    configured_strategies = {query.strategy for query in all_generated_queries}
+    executed_strategies = {query.strategy for query in executed_queries}
+    discovery_health = {
+        "strategies_configured": len(configured_strategies),
+        "strategies_used": len(executed_strategies),
+        "unused_strategies": sorted(list(configured_strategies - executed_strategies)),
+        "queries_never_executed": [query.query for query in all_generated_queries if query not in executed_queries],
+        "queries_with_zero_results": sorted(queries_with_zero_results),
+        "queries_with_only_excluded_domains": queries_with_only_excluded_domains,
+    }
+    Path("output/discovery_health.json").write_text(json.dumps(discovery_health, ensure_ascii=False, indent=2))
     stats_path = Path(output_base).with_name("run_stats.json")
     stats_path.write_text(
         json.dumps(
@@ -183,6 +247,51 @@ def run(
         )
     )
     return with_history, run_stats
+
+
+def audit_cache(
+    search_config: str = "configs/search_engines.yaml",
+    discovery_path: str = "configs/discovery.yaml",
+) -> dict:
+    config = yaml.safe_load(Path(search_config).read_text()) or {}
+    cache_config = config.get("cache", {})
+    cache_path = Path(cache_config.get("path", "output/cache/search_results.json"))
+    current_hash = build_discovery_hash(discovery_path)
+    cache_data = {}
+    cache_entries = 0
+    cache_discovery_hashes: list[str] = []
+    obsolete_entries = 0
+    queries_not_matching_current: list[str] = []
+
+    if cache_path.exists():
+        try:
+            cache_data = json.loads(cache_path.read_text())
+        except json.JSONDecodeError:
+            cache_data = {}
+
+    cache_hash = cache_data.get("discovery_hash", "")
+    cache_discovery_hashes = [cache_hash] if cache_hash else []
+    records = cache_data.get("records", {}) if isinstance(cache_data.get("records", {}), dict) else {}
+    cache_entries = len(records)
+    if cache_hash != current_hash or cache_data.get("discovery_version") != CACHE_VERSION:
+        obsolete_entries = cache_entries
+
+    current_queries = {query.query for query in generate_queries(discovery_path=discovery_path)[0]}
+    for key in records:
+        query = key.split("::", 1)[1] if "::" in key else key
+        if query not in current_queries:
+            queries_not_matching_current.append(query)
+
+    audit = {
+        "cache_entries": cache_entries,
+        "obsolete_cache_entries": obsolete_entries,
+        "current_discovery_hash": current_hash,
+        "cache_discovery_hashes": cache_discovery_hashes,
+        "queries_not_matching_current_discovery": sorted(queries_not_matching_current),
+    }
+    Path("output").mkdir(parents=True, exist_ok=True)
+    Path("output/cache_audit.json").write_text(json.dumps(audit, ensure_ascii=False, indent=2))
+    return audit
 
 
 def log(progress: Callable[[str], None] | None, message: str) -> None:
@@ -300,6 +409,8 @@ def print_run_stats(stats: RunStats) -> None:
     print(f"Emails found: {stats.emails_found}")
     print(f"Career pages found: {stats.career_pages_found}")
     print(f"Exported rows: {stats.exported_rows}")
+    print(f"Queries by strategy: {stats.queries_by_strategy}")
+    print(f"Results by strategy: {stats.results_by_strategy}")
     print(f"Run duration: {stats.run_duration}s")
     print(f"Companies analysed: {stats.companies_analysed}")
     print(f"Industries detected: {stats.industries_detected}")
@@ -332,7 +443,17 @@ def main() -> None:
     parser.add_argument("--max-profile-companies", type=int, default=None)
     parser.add_argument("--profile-only-qualified", action="store_true")
     parser.add_argument("--profile-timeout", type=int, default=15)
+    parser.add_argument(
+        "--cache-audit",
+        action="store_true",
+        help="Audit the search cache against the current discovery configuration.",
+    )
     args = parser.parse_args()
+
+    if args.cache_audit:
+        audit = audit_cache(args.search_config)
+        print(json.dumps(audit, ensure_ascii=False, indent=2))
+        return
 
     records, stats = run(
         args.limit_queries,

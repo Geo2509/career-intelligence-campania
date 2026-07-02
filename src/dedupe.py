@@ -19,10 +19,16 @@ def dedupe_companies(companies: list[dict]) -> list[dict]:
             existing = by_domain[domain]
             queries = existing.get("queries", []) + company.get("queries", [])
             engines = existing.get("engines", []) + company.get("engines", [])
+            strategies = existing.get("strategies", []) + company.get("strategies", [])
             if queries:
                 existing["queries"] = sorted(set(queries))
             if engines:
                 existing["engines"] = sorted(set(engines))
+            if strategies:
+                existing["strategies"] = sorted(set(strategies))
+            existing["discovery_confidence"] = max(
+                existing.get("discovery_confidence", 0), company.get("discovery_confidence", 0)
+            )
             if len(company.get("snippet", "")) > len(existing.get("snippet", "")):
                 existing["snippet"] = company.get("snippet", "")
                 existing["title"] = company.get("title", existing.get("title", ""))

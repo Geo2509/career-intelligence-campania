@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import yaml
@@ -110,6 +111,48 @@ def excluded_domain_type(domain: str, excluded_classes: dict[str, str]) -> str:
     return ""
 
 
+def _calculate_discovery_confidence(company: dict) -> int:
+    text = " ".join(
+        str(company.get(key, "")) for key in ("title", "snippet", "query", "strategy")
+    ).lower()
+    score = 20
+    if "site:.it" in company.get("query", ""):
+        score += 20
+    if any(term in text for term in ("azienda", "società", "societa", "srl", "spa", "società", "impresa", "azienda")):
+        score += 15
+    if any(term in text for term in ("contatti", "chi siamo", "lavora con noi", "posizioni aperte", "careers", "career", "join us")):
+        score += 20
+    if any(term in text for term in ("servizi", "service provider", "soluzioni", "borsa lavoro")):
+        score += 5
+    if any(term in text for term in ("offerte di lavoro", "annunci", "job board", "portale", "directory", "elenco aziende", "pagina gialla", "bacheca", "jobs", "indeed", "jooble", "prontopro", "subito", "jobijoba", "jobbydoo", "europages", "linkedin", "infojobs", "careerjet", "monster", "jobrapido")):
+        score -= 35
+    if any(term in text for term in ("servizi", "consulenza", "soluzioni", "service provider")) and "azienda" not in text:
+        score -= 10
+    if "lavoro" in company.get("query", "") and "contatti" not in company.get("query", "") and "lavora con noi" not in company.get("query", ""):
+        score -= 10
+    if company.get("strategy") == "company_website_search":
+        score += 20
+    if company.get("strategy") == "career_search":
+        score += 10
+    if company.get("strategy") == "business_search":
+        score -= 5
+    if company.get("strategy") == "service_search":
+        score -= 10
+    if company.get("strategy") == "logistics_search" and "data entry" in company.get("query", ""):
+        score -= 10
+    return max(0, min(100, score))
+
+
+def _map_discovery_confidence_level(confidence: int) -> str:
+    if confidence >= 80:
+        return "High"
+    if confidence >= 60:
+        return "Medium"
+    if confidence >= 40:
+        return "Low"
+    return "Ignore"
+
+
 def extract_companies(
     results: list[dict],
     negative_keywords: list[str] | None = None,
@@ -132,21 +175,26 @@ def extract_companies(
             continue
         city, region = infer_location(f"{title} {snippet} {url} {item.get('query', '')}")
 
-        companies.append(
-            {
-                "company": company_name_from_title(title, domain),
-                "domain": domain,
-                "city": city,
-                "region": region,
-                "category": "",
-                "url": url,
-                "website": f"https://{domain}",
-                "title": title,
-                "snippet": snippet,
-                "query": item.get("query", ""),
-                "source": item.get("source", ""),
-                "queries": [item.get("query", "")] if item.get("query") else [],
-                "engines": [item.get("source", "")] if item.get("source") else [],
-            }
-        )
+        source = item.get("source", "") or item.get("engine", "")
+        strategy = item.get("strategy", "") or item.get("query_strategy", "")
+        company = {
+            "company": company_name_from_title(title, domain),
+            "domain": domain,
+            "city": city,
+            "region": region,
+            "category": "",
+            "url": url,
+            "website": f"https://{domain}",
+            "title": title,
+            "snippet": snippet,
+            "query": item.get("query", ""),
+            "source": source,
+            "strategy": strategy,
+            "queries": [item.get("query", "")] if item.get("query") else [],
+            "engines": [source] if source else [],
+            "strategies": [strategy] if strategy else [],
+        }
+        company["discovery_confidence"] = _calculate_discovery_confidence(company)
+        company["discovery_confidence_level"] = _map_discovery_confidence_level(company["discovery_confidence"])
+        companies.append(company)
     return companies
