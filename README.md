@@ -16,8 +16,9 @@ The old project is only a reference for patterns such as DuckDuckGo discovery, c
 3. Extract likely company websites from search results.
 4. Remove job boards and duplicate domains.
 5. Optionally profile company websites for emails, phones, contact pages, and careers pages.
-6. Score companies by role fit, location fit, and direct contact signals.
-7. Export JSON, CSV, and XLSX files.
+6. Analyse employer intelligence: industry, business type, logistics fit, office fit, career/contact signals, qualification, and next action.
+7. Score companies by role fit, location fit, direct contact signals, and employer qualification.
+8. Export JSON, CSV, and XLSX files.
 
 ## Setup
 
@@ -39,6 +40,14 @@ Fast search-only run:
 ```bash
 python -m src.main --limit-queries 10 --no-profile --output output/campania_targets
 ```
+
+Milestone 2 full profiling run:
+
+```bash
+python -m src.main --limit-queries 10 --output output/campania_targets
+```
+
+The Excel export includes employer intelligence columns such as `Industry`, `Business Type`, `Company Size`, `Logistics Score`, `Office Score`, `HR Email`, `Qualification`, `Positive Reasons`, `Negative Reasons`, and `Next Action`.
 
 SerpAPI is configured but disabled by default. To use it, enable `serpapi` in `configs/search_engines.yaml` and set:
 

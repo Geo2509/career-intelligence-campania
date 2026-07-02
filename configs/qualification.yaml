@@ -1,0 +1,63 @@
+qualification:
+  excellent_min_score: 70
+  good_min_score: 45
+  possible_min_score: 25
+  low_min_score: 10
+weights:
+  industry:
+    Logistics: 25
+    Shipping: 22
+    Freight Forwarding: 28
+    Import Export: 25
+    Manufacturing: 12
+    Distribution: 16
+    IT: 6
+    Consulting: 5
+    Retail: -8
+    Healthcare: 0
+    Education: -4
+    Public Sector: -5
+    Unknown: 0
+  business_type:
+    B2B: 10
+    Manufacturer: 10
+    Service Provider: 8
+    Carrier: 12
+    Freight Forwarder: 18
+    Warehouse: 10
+    Port Operator: 16
+    B2C: -4
+  positive_reason_weights:
+    Logistics company: 20
+    Import Export: 16
+    Documentation: 12
+    Back Office: 14
+    Office tools: 10
+    Careers page: 8
+    Email found: 8
+    HR email found: 12
+    Campania: 8
+    Puglia: 5
+    Calabria: 5
+  negative_reason_weights:
+    Retail only: -18
+    Call center: -25
+    Sales only: -20
+    Driver positions only: -12
+    No contact path: -8
+negative_signals:
+  Call center:
+    - call center
+  Sales only:
+    - porta a porta
+    - promoter
+    - agente
+  Driver positions only:
+    - driver
+    - autista
+next_actions:
+  Excellent Match: Send CV
+  Good Match: Send CV
+  Possible Match: Manual Review
+  Low Match: Monitor Careers
+  Not Relevant: Ignore

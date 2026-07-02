@@ -1,0 +1,134 @@
+business_types:
+  B2B:
+    - b2b
+    - aziende
+    - imprese
+    - corporate
+  B2C:
+    - b2c
+    - clienti privati
+    - consumatori
+  Manufacturer:
+    - produttore
+    - produzione
+    - manufacturing
+    - fabbrica
+  Service Provider:
+    - servizi
+    - service provider
+    - soluzioni
+  Carrier:
+    - vettore
+    - carrier
+    - autotrasporto
+    - trasporto merci
+  Freight Forwarder:
+    - spedizioniere
+    - freight forwarder
+    - spedizioni internazionali
+  Warehouse:
+    - magazzino
+    - deposito
+    - warehousing
+    - stoccaggio
+  Port Operator:
+    - porto
+    - terminal
+    - portuale
+    - container
+logistics_signals:
+  Import:
+    - import
+    - importazione
+  Export:
+    - export
+    - esportazione
+  Shipping:
+    - shipping
+    - spedizioni
+  Sea Freight:
+    - sea freight
+    - trasporto marittimo
+    - navale
+  Air Freight:
+    - air freight
+    - cargo aereo
+    - trasporto aereo
+  Road Transport:
+    - road transport
+    - trasporto stradale
+    - autotrasporto
+  Customs:
+    - customs
+    - dogana
+    - sdoganamento
+  Warehouse:
+    - warehouse
+    - magazzino
+    - deposito
+  Supply Chain:
+    - supply chain
+    - catena di fornitura
+  Documentation:
+    - documentazione
+    - documenti
+    - pratiche
+office_signals:
+  Back Office:
+    - back office
+  Administration:
+    - amministrazione
+    - amministrativo
+  Document Management:
+    - gestione documentale
+    - document management
+  Data Entry:
+    - data entry
+    - inserimento dati
+  Excel:
+    - excel
+  Reporting:
+    - reporting
+    - reportistica
+  ERP:
+    - erp
+  SAP:
+    - sap
+  Teamsystem:
+    - teamsystem
+  Office 365:
+    - office 365
+    - microsoft 365
+career_signals:
+  career_page:
+    - lavora con noi
+    - careers
+    - posizioni aperte
+    - join us
+    - recruiting
+    - risorse umane
+  hr_email:
+    - hr@
+    - jobs@
+    - recruiting@
+    - careers@
+    - selezione@
+    - personale@
+size_signals:
+  Enterprise:
+    - sedi internazionali
+    - global
+    - multinazionale
+    - oltre 1000
+  Large:
+    - oltre 250
+    - gruppo
+    - multiple sedi
+  Medium:
+    - oltre 50
+    - team
+    - filiali
+  Small:
+    - famiglia
+    - artigianale
+    - locale

@@ -1,16 +1,30 @@
-aggregators:
-  - indeed
-  - linkedin.com/jobs
-  - jooble
-  - talent.com
-  - monster
-  - careerjet
-  - subito
-  - infojobs
-  - glassdoor
-  - simplyhired
-  - jobillico
-  - recruit.net
-  - jobrapido
-  - bakeca
-  - trovit
+excluded_domains:
+  job_board:
+    - indeed.com
+    - indeed.it
+    - linkedin.com
+    - jooble.org
+    - jooble.com
+    - infojobs.it
+    - monster.it
+    - talent.com
+    - careerjet.it
+    - glassdoor.it
+    - subito.it
+    - jobsora.com
+    - jobijoba.it
+    - jobrapido.it
+    - bakeca.it
+    - trovit.it
+  staffing_agency:
+    - randstad.it
+    - gigroup.it
+  directory:
+    - europages.it
+  marketplace:
+    - addlance.com
+    - prontopro.it
+  intermediary:
+    - simplyhired.com
+    - jobillico.com
+    - recruit.net

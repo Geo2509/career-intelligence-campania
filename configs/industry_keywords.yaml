@@ -1,0 +1,64 @@
+industries:
+  Logistics:
+    - logistica
+    - logistics
+    - trasporti
+    - supply chain
+    - magazzino
+    - deposito
+  Shipping:
+    - shipping
+    - spedizioni
+    - spedizione
+    - marittimo
+    - navale
+  Freight Forwarding:
+    - freight forwarding
+    - spedizioni internazionali
+    - spedizioniere
+    - forwarder
+  Import Export:
+    - import export
+    - importazione
+    - esportazione
+    - dogana
+    - customs
+  Manufacturing:
+    - produzione
+    - manufacturing
+    - stabilimento
+    - industria
+  Retail:
+    - retail
+    - negozio
+    - vendita al dettaglio
+    - e-commerce
+  Distribution:
+    - distribuzione
+    - wholesale
+    - grossista
+    - distributore
+  IT:
+    - software
+    - informatica
+    - cloud
+    - cyber
+  Consulting:
+    - consulenza
+    - consulting
+    - advisor
+  Healthcare:
+    - sanitario
+    - healthcare
+    - clinica
+    - medicale
+  Education:
+    - formazione
+    - education
+    - scuola
+    - università
+  Public Sector:
+    - comune
+    - regione
+    - pubblica amministrazione
+    - ente pubblico

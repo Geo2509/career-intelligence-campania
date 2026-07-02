@@ -7,18 +7,27 @@ from urllib.parse import urlparse
 import yaml
 
 DEFAULT_AGGREGATORS = {
-    "indeed",
-    "linkedin.com/jobs",
-    "jooble",
+    "indeed.com",
+    "indeed.it",
+    "linkedin.com",
+    "jooble.org",
+    "jooble.com",
     "talent.com",
-    "monster",
-    "careerjet",
-    "subito",
-    "infojobs",
-    "glassdoor",
-    "simplyhired",
-    "jobillico",
+    "monster.it",
+    "careerjet.it",
+    "subito.it",
+    "infojobs.it",
+    "glassdoor.it",
+    "simplyhired.com",
+    "jobillico.com",
     "recruit.net",
+    "jobijoba.it",
+    "jobsora.com",
+    "randstad.it",
+    "gigroup.it",
+    "addlance.com",
+    "europages.it",
+    "prontopro.it",
 }
 
 LOCATION_HINTS = {
@@ -48,7 +57,29 @@ def load_aggregators(path: str | Path = "configs/aggregators.yaml") -> list[str]
     config_path = Path(path)
     if not config_path.exists():
         return sorted(DEFAULT_AGGREGATORS)
-    return (yaml.safe_load(config_path.read_text()) or {}).get("aggregators", sorted(DEFAULT_AGGREGATORS))
+    config = yaml.safe_load(config_path.read_text()) or {}
+    if "aggregators" in config:
+        return config.get("aggregators", sorted(DEFAULT_AGGREGATORS))
+    excluded = config.get("excluded_domains", {})
+    domains: list[str] = []
+    for values in excluded.values():
+        domains.extend(values or [])
+    return sorted(set(domains))
+
+
+def load_excluded_domain_classes(path: str | Path = "configs/aggregators.yaml") -> dict[str, str]:
+    config_path = Path(path)
+    if not config_path.exists():
+        return {domain: "intermediary" for domain in DEFAULT_AGGREGATORS}
+    config = yaml.safe_load(config_path.read_text()) or {}
+    excluded = config.get("excluded_domains", {})
+    classes: dict[str, str] = {}
+    for category, domains in excluded.items():
+        for domain in domains or []:
+            classes[domain.lower()] = category
+    for domain in config.get("aggregators", []):
+        classes.setdefault(domain.lower(), "intermediary")
+    return classes
 
 
 def company_name_from_title(title: str, domain: str) -> str:
@@ -69,6 +100,14 @@ def infer_location(text: str) -> tuple[str, str]:
 def is_aggregator(url: str, aggregators: list[str]) -> bool:
     lowered = url.lower()
     return any(aggregator.lower() in lowered for aggregator in aggregators)
+
+
+def excluded_domain_type(domain: str, excluded_classes: dict[str, str]) -> str:
+    lowered = domain.lower()
+    for excluded_domain, category in excluded_classes.items():
+        if lowered == excluded_domain or lowered.endswith(f".{excluded_domain}"):
+            return category
+    return ""
 
 
 def extract_companies(

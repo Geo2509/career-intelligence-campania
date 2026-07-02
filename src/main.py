@@ -12,6 +12,7 @@ import yaml
 from .company_extractor import extract_companies, load_aggregators
 from .dedupe import dedupe_companies
 from .discovery import discover_search_results
+from .employer_intelligence import enrich_companies
 from .employer_validator import filter_valid_employers, validate_employer
 from .export import export_records
 from .history import update_history
@@ -36,6 +37,14 @@ class RunStats:
     search_errors: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
+    companies_analysed: int = 0
+    industries_detected: int = 0
+    logistics_companies: int = 0
+    back_office_companies: int = 0
+    hr_emails_found: int = 0
+    excellent_matches: int = 0
+    good_matches: int = 0
+    ignored_companies: int = 0
 
 
 def load_negative_keywords(path: str = "configs/negative_keywords.yaml") -> list[str]:
@@ -72,6 +81,7 @@ def run(
     else:
         companies = [validate_employer(company) for company in companies]
 
+    companies = enrich_companies(companies)
     scored = score_companies(companies)
     with_history = update_history(scored, history_path)
     export_records(with_history, output_base)
@@ -91,6 +101,14 @@ def run(
         search_errors=search_stats.search_errors,
         cache_hits=search_stats.cache_hits,
         cache_misses=search_stats.cache_misses,
+        companies_analysed=len(companies),
+        industries_detected=sum(1 for company in companies if company.get("industry") and company.get("industry") != "Unknown"),
+        logistics_companies=sum(1 for company in companies if company.get("logistics_score", 0) > 0),
+        back_office_companies=sum(1 for company in companies if "Back Office" in company.get("office_signals", [])),
+        hr_emails_found=sum(1 for company in companies if company.get("hr_email")),
+        excellent_matches=sum(1 for company in companies if company.get("qualification") == "Excellent Match"),
+        good_matches=sum(1 for company in companies if company.get("qualification") == "Good Match"),
+        ignored_companies=sum(1 for company in companies if company.get("next_action") == "Ignore"),
     )
     stats_path = Path(output_base).with_name("run_stats.json")
     stats_path.write_text(
@@ -121,6 +139,15 @@ def print_run_stats(stats: RunStats) -> None:
     print(f"Career pages found: {stats.career_pages_found}")
     print(f"Exported rows: {stats.exported_rows}")
     print(f"Run duration: {stats.run_duration}s")
+    print(f"Companies analysed: {stats.companies_analysed}")
+    print(f"Industries detected: {stats.industries_detected}")
+    print(f"Logistics companies: {stats.logistics_companies}")
+    print(f"Back office companies: {stats.back_office_companies}")
+    print(f"Career pages found: {stats.career_pages_found}")
+    print(f"HR emails found: {stats.hr_emails_found}")
+    print(f"Excellent matches: {stats.excellent_matches}")
+    print(f"Good matches: {stats.good_matches}")
+    print(f"Ignored companies: {stats.ignored_companies}")
 
 
 def main() -> None:

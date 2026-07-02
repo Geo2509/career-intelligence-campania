@@ -15,19 +15,19 @@ def score_company(company: dict, scoring_config: dict | None = None) -> dict:
     negative_weights = config.get("negative_weights", {})
     confidence_weights = config.get("confidence", {})
     score = 0
-    positive_reasons: list[str] = []
-    negative_reasons: list[str] = []
+    positive_reasons: list[str] = list(company.get("positive_reasons", []))
+    negative_reasons: list[str] = list(company.get("negative_reasons", []))
     text = " ".join(
         str(company.get(key, ""))
         for key in ("company", "domain", "title", "snippet", "url", "page_text", "region", "category")
     ).lower()
 
     for keyword, weight in positive_weights.items():
-        if keyword.lower() in text:
+        if keyword.lower() in text and keyword not in positive_reasons:
             score += int(weight)
             positive_reasons.append(keyword)
     for keyword, weight in negative_weights.items():
-        if keyword.lower() in text:
+        if keyword.lower() in text and keyword not in negative_reasons:
             score += int(weight)
             negative_reasons.append(keyword)
 
@@ -55,13 +55,15 @@ def score_company(company: dict, scoring_config: dict | None = None) -> dict:
         confidence += int(confidence_weights.get("facebook", 5))
 
     scored = dict(company)
-    scored["score"] = max(0, score)
+    scored["score"] = max(0, score + int(company.get("qualification_score", 0)))
     scored["confidence"] = min(100, confidence)
-    scored["positive_reasons"] = positive_reasons
-    scored["negative_reasons"] = negative_reasons
+    scored["positive_reasons"] = sorted(set(positive_reasons))
+    scored["negative_reasons"] = sorted(set(negative_reasons))
     scored["score_reasons"] = ",".join(positive_reasons)
-    scored["why_relevant"] = "; ".join(positive_reasons)
-    scored["next_action"] = "Email direct contact" if company.get("emails") else "Check contact/careers page"
+    scored["why_relevant"] = "; ".join(scored["positive_reasons"])
+    scored["next_action"] = company.get("next_action") or (
+        "Email direct contact" if company.get("emails") else "Check contact/careers page"
+    )
     return scored
 
 
