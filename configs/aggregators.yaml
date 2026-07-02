@@ -14,17 +14,55 @@ excluded_domains:
     - jobsora.com
     - jobijoba.it
     - jobrapido.it
+    - jobatus.it
+    - jobbydoo.it
+    - adzuna.it
+    - lavoro.it
+    - posizioniaperte.com
+    - bachecalavoro.com
+    - ticonsiglio.com
     - bakeca.it
     - trovit.it
   staffing_agency:
     - randstad.it
     - gigroup.it
+    - adecco.it
+    - tempimodernilavoro.com
   directory:
     - europages.it
+    - virgilio.it
+    - aziende.it
+    - informazione-aziende.it
+    - paginebianche.it
+    - paginegialle.it
+    - registroaziende.it
+    - reportaziende.it
+    - visurissima.it
+    - amministrazionicomunali.it
+    - elenchitelefonici.it
+    - indirizzi.it
+    - ufficiocamerale.it
+    - agenziedipubblicita.org
   marketplace:
     - addlance.com
     - prontopro.it
+    - edilnet.it
+  public_sector:
+    - senato.it
+    - comuni-italiani.it
+    - italia.it
+    - aci.it
+    - gov.it
+    - camcom.it
+    - inps.it
+    - puglia.it
+    - napoli.it
+    - na.it
+  social:
+    - instagram.com
   intermediary:
     - simplyhired.com
     - jobillico.com
     - recruit.net
+  non_employer:
+    - fibercallcenter.com

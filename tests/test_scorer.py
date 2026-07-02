@@ -16,5 +16,5 @@ def test_score_company_prefers_direct_contacts() -> None:
 
     assert scored["score"] > 0
     assert scored["confidence"] >= 90
-    assert "email" in scored["positive_reasons"]
+    assert "Email found" in scored["positive_reasons"]
     assert scored["next_action"] == "Email direct contact"

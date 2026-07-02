@@ -17,10 +17,7 @@ def score_company(company: dict, scoring_config: dict | None = None) -> dict:
     score = 0
     positive_reasons: list[str] = list(company.get("positive_reasons", []))
     negative_reasons: list[str] = list(company.get("negative_reasons", []))
-    text = " ".join(
-        str(company.get(key, ""))
-        for key in ("company", "domain", "title", "snippet", "url", "page_text", "region", "category")
-    ).lower()
+    text = " ".join(str(company.get(key, "")) for key in ("domain", "page_text", "category")).lower()
 
     for keyword, weight in positive_weights.items():
         if keyword.lower() in text and keyword not in positive_reasons:
@@ -31,12 +28,12 @@ def score_company(company: dict, scoring_config: dict | None = None) -> dict:
             score += int(weight)
             negative_reasons.append(keyword)
 
-    if company.get("emails") and "email" not in positive_reasons:
+    if company.get("emails") and "email" not in positive_reasons and "Email found" not in positive_reasons:
         score += int(positive_weights.get("email", 20))
-        positive_reasons.append("email")
-    if company.get("has_careers_page") and "career page" not in positive_reasons:
+        positive_reasons.append("Email found")
+    if company.get("has_careers_page") and "career page" not in positive_reasons and "Careers page" not in positive_reasons:
         score += int(positive_weights.get("career page", 12))
-        positive_reasons.append("career page")
+        positive_reasons.append("Careers page")
 
     confidence = 0
     if company.get("is_employer"):
