@@ -26,6 +26,11 @@ from .discovery_optimization import (
     write_discovery_recommendations,
     write_query_performance_report,
 )
+from .engine_performance import (
+    build_engine_performance_report,
+    print_engine_report,
+    write_engine_performance_report,
+)
 from .employer_intelligence import enrich_companies
 from .employer_validator import filter_valid_employers, validate_employer
 from .export import export_records
@@ -39,6 +44,7 @@ from .strategy_performance import (
     print_strategy_report,
     write_strategy_performance_report,
 )
+from .validation import build_validation_report, print_validation_report, write_validation_report
 from .website_profiler import profile_website
 
 
@@ -99,12 +105,14 @@ def run(
     max_profile_companies: int | None = None,
     profile_only_qualified: bool | None = False,
     profile_timeout: int = 15,
+    engine: str = "duckduckgo",
 ) -> tuple[list[dict], RunStats]:
     started = time.monotonic()
     progress = print if verbose else None
     search_run = discover_search_results(
         search_engines_path=search_engines_path,
         limit_queries=limit_queries,
+        engine=engine,
         progress=progress,
     )
     raw_results = [result.to_dict() for result in search_run.results]
@@ -185,6 +193,12 @@ def run(
         profiled_domains=profiled_domains,
     )
     write_strategy_performance_report(strategy_report)
+    engine_report = build_engine_performance_report(
+        search_stats=search_stats,
+        raw_results=raw_results,
+        final_companies=with_history,
+    )
+    write_engine_performance_report(engine_report)
     current_strategy_ranking = build_strategy_ranking(strategy_report)
     query_performance = build_query_performance_report(
         all_queries=all_queries,
@@ -287,6 +301,15 @@ def run(
         learning=learning,
     )
     write_discovery_recommendations(recommendations)
+    validation_report = build_validation_report(
+        records=with_history,
+        run_stats=run_stats,
+        engine_performance=engine_report,
+        strategy_ranking=strategy_ranking,
+        query_performance=query_performance,
+        discovery_recommendations=recommendations,
+    )
+    write_validation_report(validation_report)
     stats_path = Path(output_base).with_name("run_stats.json")
     stats_path.write_text(
         json.dumps(
@@ -491,6 +514,7 @@ def main() -> None:
     )
     parser.add_argument("--output", default="output/campania_targets")
     parser.add_argument("--search-config", default="configs/search_engines.yaml")
+    parser.add_argument("--engine", choices=("duckduckgo", "serpapi", "all"), default="duckduckgo")
     parser.add_argument("--history", default="history/companies_history.json")
     parser.add_argument("--quiet", action="store_true", help="Hide live progress output.")
     parser.add_argument("--max-profile-companies", type=int, default=None)
@@ -521,6 +545,16 @@ def main() -> None:
         action="store_true",
         help="Print discovery optimization recommendations after the run.",
     )
+    parser.add_argument(
+        "--engine-report",
+        action="store_true",
+        help="Print search engine performance after the run.",
+    )
+    parser.add_argument(
+        "--validation-report",
+        action="store_true",
+        help="Print validation quality summary after the run.",
+    )
     args = parser.parse_args()
 
     if args.cache_audit:
@@ -538,6 +572,7 @@ def main() -> None:
         max_profile_companies=args.max_profile_companies,
         profile_only_qualified=args.profile_only_qualified,
         profile_timeout=args.profile_timeout,
+        engine=args.engine,
     )
     print(f"Exported {len(records)} companies to {args.output}.json/.csv/.xlsx")
     print_run_stats(stats)
@@ -561,6 +596,16 @@ def main() -> None:
         if report_path.exists():
             print("")
             print_recommendations(json.loads(report_path.read_text()))
+    if args.engine_report:
+        report_path = Path("output/engine_performance.json")
+        if report_path.exists():
+            print("")
+            print_engine_report(json.loads(report_path.read_text()))
+    if args.validation_report:
+        report_path = Path("output/validation_report.json")
+        if report_path.exists():
+            print("")
+            print_validation_report(json.loads(report_path.read_text()))
 
 
 if __name__ == "__main__":

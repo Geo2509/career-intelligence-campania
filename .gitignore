@@ -6,7 +6,10 @@ __pycache__/
 
 .env
 
+# Runtime outputs (reports, exports, analytics)
 output/*
 !output/.gitkeep
+
+# Runtime history
 history/*
 !history/.gitkeep

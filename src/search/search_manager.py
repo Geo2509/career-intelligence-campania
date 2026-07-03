@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -27,13 +28,14 @@ def load_search_config(config_path: str | Path) -> dict:
     return yaml.safe_load(Path(config_path).read_text()) or {}
 
 
-def load_search_clients(config_path: str | Path) -> list[tuple[SearchClient, int]]:
+def load_search_clients(config_path: str | Path, engine: str = "duckduckgo") -> list[tuple[SearchClient, int]]:
     config = load_search_config(config_path)
     engines = config.get("engines", {})
     clients: list[tuple[SearchClient, int]] = []
+    requested = _selected_engines(engine)
 
     duckduckgo = engines.get("duckduckgo", {})
-    if duckduckgo.get("enabled", False):
+    if "duckduckgo" in requested and duckduckgo.get("enabled", True):
         clients.append(
             (
                 DuckDuckGoSearchClient(
@@ -46,11 +48,13 @@ def load_search_clients(config_path: str | Path) -> list[tuple[SearchClient, int
         )
 
     serpapi = engines.get("serpapi", {})
-    if serpapi.get("enabled", False):
+    serpapi_key_env = serpapi.get("api_key_env", "SERPAPI_API_KEY")
+    serpapi_available = bool(os.getenv(serpapi_key_env))
+    if "serpapi" in requested and serpapi_available:
         clients.append(
             (
                 SerpApiSearchClient(
-                    serpapi.get("api_key_env", "SERPAPI_API_KEY"),
+                    serpapi_key_env,
                     retries=int(serpapi.get("retries", 2)),
                     timeout=int(serpapi.get("timeout", 20)),
                     rate_limit_seconds=float(serpapi.get("rate_limit_seconds", 0.5)),
@@ -58,6 +62,20 @@ def load_search_clients(config_path: str | Path) -> list[tuple[SearchClient, int
                 int(serpapi.get("max_results", 10)),
             )
         )
+
+    if not clients and "duckduckgo" not in requested:
+        duckduckgo = engines.get("duckduckgo", {})
+        if duckduckgo.get("enabled", True):
+            clients.append(
+                (
+                    DuckDuckGoSearchClient(
+                        retries=int(duckduckgo.get("retries", 2)),
+                        timeout=int(duckduckgo.get("timeout", 20)),
+                        rate_limit_seconds=float(duckduckgo.get("rate_limit_seconds", 1.0)),
+                    ),
+                    int(duckduckgo.get("max_results", 10)),
+                )
+            )
 
     return clients
 
@@ -87,6 +105,7 @@ class SearchManager:
                 progress("")
                 progress(f"[{index}/{len(query_list)}] {query_text}")
             for client, max_results in self.clients:
+                stats.record_engine_query(client.name)
                 stats.query_results.setdefault(query_text, 0)
                 stats.query_strategy_map[query_text] = strategy
                 cached = self.cache.get(query_text, client.name) if self.cache else None
@@ -133,7 +152,7 @@ class SearchManager:
         return SearchRun(results=results, stats=stats)
 
 
-def build_search_manager(config_path: str | Path, discovery_hash: str) -> SearchManager:
+def build_search_manager(config_path: str | Path, discovery_hash: str, engine: str = "duckduckgo") -> SearchManager:
     config = load_search_config(config_path)
     cache_config = config.get("cache", {})
     cache = SearchCache(
@@ -142,7 +161,7 @@ def build_search_manager(config_path: str | Path, discovery_hash: str) -> Search
         enabled=bool(cache_config.get("enabled", True)),
         discovery_hash=discovery_hash,
     )
-    return SearchManager(load_search_clients(config_path), cache=cache)
+    return SearchManager(load_search_clients(config_path, engine=engine), cache=cache)
 
 
 def engine_label(name: str) -> str:
@@ -151,3 +170,11 @@ def engine_label(name: str) -> str:
         "serpapi": "SerpAPI",
     }
     return labels.get(name, name)
+
+
+def _selected_engines(engine: str) -> set[str]:
+    if engine == "all":
+        return {"duckduckgo", "serpapi"}
+    if engine in {"duckduckgo", "serpapi"}:
+        return {engine}
+    raise ValueError(f"Unknown search engine: {engine}")

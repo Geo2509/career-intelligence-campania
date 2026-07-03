@@ -67,6 +67,15 @@ def test_run_metadata_written(tmp_path: Path, monkeypatch):
     strategy_report = json.loads(strategy_path.read_text())
     assert "direct" in strategy_report["strategies"]
     assert strategy_report["strategies"]["direct"]["precision"] == 0
+    engine_path = Path("output/engine_performance.json")
+    assert engine_path.exists()
+    engine_report = json.loads(engine_path.read_text())
+    assert "engines" in engine_report
+    validation_path = Path("output/validation_report.json")
+    assert validation_path.exists()
+    validation_report = json.loads(validation_path.read_text())
+    assert "validation_dataset" in validation_report
+    assert "quality" in validation_report
 
 
 def test_discovery_health_written(tmp_path: Path, monkeypatch):

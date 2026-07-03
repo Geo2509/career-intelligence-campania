@@ -64,6 +64,8 @@ class SearchStats:
     cache_hits_by_strategy: dict[str, int] = field(default_factory=dict)
     cache_misses_by_strategy: dict[str, int] = field(default_factory=dict)
     results_by_strategy: dict[str, int] = field(default_factory=dict)
+    queries_by_engine: dict[str, int] = field(default_factory=dict)
+    results_by_engine: dict[str, int] = field(default_factory=dict)
     query_results: dict[str, int] = field(default_factory=dict)
     query_strategy_map: dict[str, str] = field(default_factory=dict)
     executed_query_texts: set[str] = field(default_factory=set)
@@ -74,7 +76,11 @@ class SearchStats:
             self.ddg_results += count
         elif engine == "serpapi":
             self.serpapi_results += count
+        self.results_by_engine[engine] = self.results_by_engine.get(engine, 0) + count
         self.total_raw_results += count
+
+    def record_engine_query(self, engine: str, count: int = 1) -> None:
+        self.queries_by_engine[engine] = self.queries_by_engine.get(engine, 0) + count
 
     def record_error(self, engine: str, query: str, error: str) -> None:
         self.search_errors += 1
