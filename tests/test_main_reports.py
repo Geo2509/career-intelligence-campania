@@ -62,6 +62,11 @@ def test_run_metadata_written(tmp_path: Path, monkeypatch):
     assert metadata["cache_misses"] == 0
     assert metadata["raw_results"] == 0
     assert metadata["unique_companies"] == 0
+    strategy_path = Path("output/strategy_performance.json")
+    assert strategy_path.exists()
+    strategy_report = json.loads(strategy_path.read_text())
+    assert "direct" in strategy_report["strategies"]
+    assert strategy_report["strategies"]["direct"]["precision"] == 0
 
 
 def test_discovery_health_written(tmp_path: Path, monkeypatch):

@@ -14,6 +14,18 @@ from .company_extractor import extract_companies, is_aggregator, load_aggregator
 from .company_extractor import excluded_domain_type, load_excluded_domain_classes
 from .dedupe import dedupe_companies
 from .discovery import discover_search_results
+from .discovery_optimization import (
+    STRATEGY_RANKING_PATH,
+    build_discovery_recommendations,
+    build_historical_strategy_ranking,
+    build_query_performance_report,
+    print_query_ranking,
+    print_recommendations,
+    print_strategy_ranking,
+    update_discovery_learning,
+    write_discovery_recommendations,
+    write_query_performance_report,
+)
 from .employer_intelligence import enrich_companies
 from .employer_validator import filter_valid_employers, validate_employer
 from .export import export_records
@@ -21,6 +33,12 @@ from .history import update_history
 from .query_generator import build_discovery_hash, generate_queries
 from .scorer import score_companies
 from .search.cache import CACHE_VERSION
+from .strategy_performance import (
+    build_strategy_ranking,
+    build_strategy_performance_report,
+    print_strategy_report,
+    write_strategy_performance_report,
+)
 from .website_profiler import profile_website
 
 
@@ -103,6 +121,7 @@ def run(
         aggregators=load_aggregators(),
     )
     after_filter = len(companies)
+    after_filter_companies = list(companies)
     log(progress, f"Remaining companies: {after_filter}")
 
     log(progress, "Deduplicating companies...")
@@ -137,10 +156,11 @@ def run(
         profile_time_total = round(time.monotonic() - profile_started, 2)
         profile_time_average = round(profile_time_total / len(profiled), 2) if profiled else 0.0
         profiled_count = len(profiled)
+        profiled_domains = {profiled_company.get("domain", "") for profiled_company in profiled}
         companies = profiled + [
             validate_employer(company)
             for company in companies
-            if company.get("domain") not in {profiled_company.get("domain") for profiled_company in profiled}
+            if company.get("domain") not in profiled_domains
         ]
     else:
         log(progress, "Skipping website profiling (--no-profile).")
@@ -149,18 +169,36 @@ def run(
         profile_time_total = 0.0
         profile_time_average = 0.0
         profiled_count = 0
+        profiled_domains = set()
 
     log(progress, "Analysing employer intelligence...")
     companies = enrich_companies(companies)
     log(progress, "Scoring companies...")
     scored = score_companies(companies)
     with_history = update_history(scored, history_path)
+    strategy_report = build_strategy_performance_report(
+        all_queries=all_queries,
+        search_stats=search_stats,
+        raw_results=raw_results,
+        after_filter_companies=after_filter_companies,
+        final_companies=with_history,
+        profiled_domains=profiled_domains,
+    )
+    write_strategy_performance_report(strategy_report)
+    current_strategy_ranking = build_strategy_ranking(strategy_report)
+    query_performance = build_query_performance_report(
+        all_queries=all_queries,
+        raw_results=raw_results,
+        final_companies=with_history,
+        profiled_domains=profiled_domains,
+    )
+    write_query_performance_report(query_performance)
     log(progress, "Exporting Excel...")
     export_records(with_history, output_base)
     log(progress, "Done.")
     run_stats = RunStats(
-        queries_generated=search_stats.queries_generated,
-        queries_executed=search_stats.queries_executed,
+        queries_generated=len(all_queries),
+        queries_executed=len(executed_queries),
         raw_results=len(raw_results),
         after_aggregator_filter=after_filter,
         unique_companies=len(companies),
@@ -234,6 +272,21 @@ def run(
         "queries_with_only_excluded_domains": queries_with_only_excluded_domains,
     }
     Path("output/discovery_health.json").write_text(json.dumps(discovery_health, ensure_ascii=False, indent=2))
+    learning = update_discovery_learning(
+        strategy_ranking=current_strategy_ranking,
+        query_performance=query_performance,
+    )
+    strategy_ranking = build_historical_strategy_ranking(learning, fallback_ranking=current_strategy_ranking)
+    STRATEGY_RANKING_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STRATEGY_RANKING_PATH.write_text(json.dumps(strategy_ranking, ensure_ascii=False, indent=2))
+    recommendations = build_discovery_recommendations(
+        strategy_ranking=strategy_ranking,
+        query_performance=query_performance,
+        discovery_health=discovery_health,
+        strategy_performance=strategy_report,
+        learning=learning,
+    )
+    write_discovery_recommendations(recommendations)
     stats_path = Path(output_base).with_name("run_stats.json")
     stats_path.write_text(
         json.dumps(
@@ -448,6 +501,26 @@ def main() -> None:
         action="store_true",
         help="Audit the search cache against the current discovery configuration.",
     )
+    parser.add_argument(
+        "--strategy-report",
+        action="store_true",
+        help="Print a readable strategy performance table after the run.",
+    )
+    parser.add_argument(
+        "--strategy-ranking",
+        action="store_true",
+        help="Print ranked discovery strategies after the run.",
+    )
+    parser.add_argument(
+        "--query-ranking",
+        action="store_true",
+        help="Print ranked discovery queries after the run.",
+    )
+    parser.add_argument(
+        "--recommend-discovery",
+        action="store_true",
+        help="Print discovery optimization recommendations after the run.",
+    )
     args = parser.parse_args()
 
     if args.cache_audit:
@@ -468,6 +541,26 @@ def main() -> None:
     )
     print(f"Exported {len(records)} companies to {args.output}.json/.csv/.xlsx")
     print_run_stats(stats)
+    if args.strategy_report:
+        report_path = Path("output/strategy_performance.json")
+        if report_path.exists():
+            print("")
+            print_strategy_report(json.loads(report_path.read_text()))
+    if args.strategy_ranking:
+        report_path = Path("output/strategy_ranking.json")
+        if report_path.exists():
+            print("")
+            print_strategy_ranking(json.loads(report_path.read_text()))
+    if args.query_ranking:
+        report_path = Path("output/query_performance.json")
+        if report_path.exists():
+            print("")
+            print_query_ranking(json.loads(report_path.read_text()))
+    if args.recommend_discovery:
+        report_path = Path("output/discovery_recommendations.json")
+        if report_path.exists():
+            print("")
+            print_recommendations(json.loads(report_path.read_text()))
 
 
 if __name__ == "__main__":
