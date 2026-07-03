@@ -11,21 +11,24 @@ def test_excluded_domains_are_filtered_before_profiling() -> None:
     )
 
     assert [company["domain"] for company in selected] == ["realazienda.it"]
-    assert skipped["excluded_job_board"] == 1
+    assert skipped["skipped_domain_excluded"] == 1
+    assert skipped["skipped_job_board"] == 1
 
 
 def test_public_sector_domains_are_not_profiled() -> None:
     selected, skipped = select_companies_for_profiling([{"domain": "senato.it", "title": "Ufficio"}])
 
     assert selected == []
-    assert skipped["excluded_public_sector"] == 1
+    assert skipped["skipped_domain_excluded"] == 1
+    assert skipped["skipped_public_sector"] == 1
 
 
 def test_social_domains_are_not_profiled() -> None:
     selected, skipped = select_companies_for_profiling([{"domain": "instagram.com", "title": "Azienda"}])
 
     assert selected == []
-    assert skipped["excluded_social"] == 1
+    assert skipped["skipped_domain_excluded"] == 1
+    assert skipped["skipped_social"] == 1
 
 
 def test_max_profile_companies_limit_works() -> None:
@@ -68,7 +71,8 @@ def test_milestone_22_public_portals_are_not_profiled() -> None:
     )
 
     assert selected == []
-    assert skipped["excluded_public_sector"] == 4
+    assert skipped["skipped_domain_excluded"] == 4
+    assert skipped["skipped_public_sector"] == 4
 
 
 def test_milestone_22_staffing_and_call_center_are_not_profiled() -> None:
@@ -81,8 +85,9 @@ def test_milestone_22_staffing_and_call_center_are_not_profiled() -> None:
     )
 
     assert selected == []
-    assert skipped["excluded_staffing_agency"] == 2
-    assert skipped["excluded_non_employer"] == 1
+    assert skipped["skipped_domain_excluded"] == 3
+    assert skipped["skipped_staffing_agency"] == 2
+    assert skipped["skipped_non_employer"] == 1
 
 
 def test_milestone_22_advertising_directory_is_not_profiled() -> None:
@@ -91,7 +96,8 @@ def test_milestone_22_advertising_directory_is_not_profiled() -> None:
     )
 
     assert selected == []
-    assert skipped["excluded_directory"] == 1
+    assert skipped["skipped_domain_excluded"] == 1
+    assert skipped["skipped_directory"] == 1
 
 
 def test_weak_employer_evidence_requires_specific_signal() -> None:
@@ -101,3 +107,82 @@ def test_weak_employer_evidence_requires_specific_signal() -> None:
     assert weak_employer_evidence(
         {"domain": "example.it", "title": "Azienda logistica import export", "snippet": "Contatti"}
     )
+
+
+def test_milestone_41_latest_run_domains_are_not_profiled_by_category() -> None:
+    selected, skipped = select_companies_for_profiling(
+        [
+            {"domain": "humangest.it", "title": "Agenzia lavoro"},
+            {"domain": "aslnapoli1centro.it", "title": "ASL Napoli"},
+            {"domain": "oraridiapertura24.it", "title": "Directory orari"},
+            {"domain": "ildispariquotidiano.it", "title": "Notizie Campania"},
+            {"domain": "uniroma1.it", "title": "Università"},
+            {"domain": "similarweb.com", "title": "Analytics"},
+            {"domain": "aon.com", "title": "Insurance"},
+            {"domain": "apple.com", "title": "Corporate"},
+            {"domain": "bolletta-acqua.it", "title": "Pagamento bollette"},
+        ]
+    )
+
+    assert selected == []
+    assert skipped["skipped_domain_excluded"] == 9
+    assert skipped["skipped_staffing_agency"] == 1
+    assert skipped["skipped_public_sector"] == 1
+    assert skipped["skipped_directory"] == 1
+    assert skipped["skipped_media"] == 1
+    assert skipped["skipped_education"] == 1
+    assert skipped["skipped_analytics_tool"] == 1
+    assert skipped["skipped_bank_finance"] == 1
+    assert skipped["skipped_non_target_big_corporate"] == 1
+    assert skipped["skipped_non_employer"] == 1
+
+
+def test_milestone_41_staffing_agencies_are_not_profiled() -> None:
+    selected, skipped = select_companies_for_profiling(
+        [
+            {"domain": "adecco.it", "title": "Offerte lavoro"},
+            {"domain": "humangest.it", "title": "Agenzia lavoro"},
+            {"domain": "openjobmetis.it", "title": "Agenzia lavoro"},
+            {"domain": "generazionevincente.it", "title": "Agenzia lavoro"},
+            {"domain": "during.it", "title": "Agenzia lavoro"},
+            {"domain": "gesforsrl.it", "title": "Agenzia lavoro"},
+        ]
+    )
+
+    assert selected == []
+    assert skipped["skipped_domain_excluded"] == 6
+    assert skipped["skipped_staffing_agency"] == 6
+
+
+def test_milestone_41_excluded_staffing_agency_never_gets_send_cv() -> None:
+    enriched = enrich_company(
+        {
+            "company": "Adecco",
+            "domain": "adecco.it",
+            "page_text": "azienda logistica export back office contatti",
+            "emails": ["info@adecco.it"],
+            "contact_url": "https://adecco.it/contatti",
+            "career_page": "https://adecco.it/lavora-con-noi",
+            "is_employer": True,
+        }
+    )
+
+    assert enriched["next_action"] != "Send CV"
+    assert enriched["next_action"] == "Manual Review"
+
+
+def test_milestone_41_latest_false_positive_domains_never_get_send_cv() -> None:
+    for domain in ("lavoratorio.it", "traspare.com"):
+        enriched = enrich_company(
+            {
+                "company": domain,
+                "domain": domain,
+                "page_text": "azienda logistica export back office contatti lavora con noi",
+                "emails": [f"info@{domain}"],
+                "contact_url": f"https://{domain}/contatti",
+                "career_page": f"https://{domain}/lavora-con-noi",
+                "is_employer": True,
+            }
+        )
+
+        assert enriched["next_action"] == "Ignore"

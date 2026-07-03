@@ -146,7 +146,7 @@ def run(
         log(
             progress,
             f"Pre-profile filter: {len(profile_candidates)} selected, "
-            f"{sum(skipped_reason_counts.values())} skipped",
+            f"{len(companies) - len(profile_candidates)} skipped",
         )
         profiled = []
         profile_started = time.monotonic()
@@ -236,7 +236,7 @@ def run(
         excellent_matches=sum(1 for company in companies if company.get("qualification") == "Excellent Match"),
         good_matches=sum(1 for company in companies if company.get("qualification") == "Good Match"),
         ignored_companies=sum(1 for company in companies if company.get("next_action") == "Ignore"),
-        skipped_before_profiling=sum(skipped_reason_counts.values()),
+        skipped_before_profiling=len(companies) - profiled_count,
         skipped_reason_counts=skipped_reason_counts,
         profile_time_total=profile_time_total,
         profile_time_average=profile_time_average,
@@ -381,12 +381,21 @@ def select_companies_for_profiling(
     profile_only_qualified: bool = False,
 ) -> tuple[list[dict], dict[str, int]]:
     selected: list[dict] = []
-    skipped: dict[str, int] = {}
+    skipped: dict[str, int] = {
+        "skipped_domain_excluded": 0,
+        "skipped_staffing_agency": 0,
+        "skipped_public_sector": 0,
+        "skipped_directory": 0,
+        "skipped_media": 0,
+        "skipped_education": 0,
+    }
     excluded_classes = load_excluded_domain_classes()
 
     for company in companies:
         reason = profile_skip_reason(company, excluded_classes, profile_only_qualified)
         if reason:
+            if reason.startswith("skipped_") and reason != "skipped_domain_excluded":
+                skipped["skipped_domain_excluded"] = skipped.get("skipped_domain_excluded", 0) + 1
             skipped[reason] = skipped.get(reason, 0) + 1
             continue
         if max_profile_companies is not None and len(selected) >= max_profile_companies:
@@ -403,7 +412,7 @@ def profile_skip_reason(
 ) -> str:
     excluded_type = excluded_domain_type(company.get("domain", ""), excluded_classes or load_excluded_domain_classes())
     if excluded_type:
-        return f"excluded_{excluded_type}"
+        return f"skipped_{excluded_type}"
     if profile_only_qualified and company.get("qualification") in {"Low Match", "Not Relevant"}:
         return "not_qualified"
     if not weak_employer_evidence(company):

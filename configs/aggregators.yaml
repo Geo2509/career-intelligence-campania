@@ -1,5 +1,19 @@
 excluded_domains:
   job_board:
+    - lavoratorio.it
+    - simplyhired.it
+    - nettowork.it
+    - jobintourism.it
+    - lavorare.org
+    - lavoroperdisabili.it
+    - agrieuro.jobs
+    - appjobs.com
+    - chelavoro.net
+    - lavoroeconcorsi.com
+    - cercolavoro.com
+    - coopjobs.ch
+    - mcdonalds.it
+    - ucv.online
     - indeed.com
     - indeed.it
     - linkedin.com
@@ -27,8 +41,30 @@ excluded_domains:
     - randstad.it
     - gigroup.it
     - adecco.it
+    - humangest.it
+    - openjobmetis.it
+    - generazionevincente.it
+    - during.it
+    - gesforsrl.it
+    - manpower.it
+    - adamiassociati.com
+    - adecco.com
     - tempimodernilavoro.com
   directory:
+    - oraridiapertura24.it
+    - firmania.it
+    - infocamere.it
+    - reteimprese.it
+    - empresite.it
+    - quotalo.it
+    - clutch.co
+    - bancomail.it
+    - pagine12.it
+    - comuniecitta.it
+    - centroimpiego.it
+    - do24.it
+    - energia-luce.it
+    - qualcherisposta.it
     - europages.it
     - virgilio.it
     - aziende.it
@@ -47,7 +83,23 @@ excluded_domains:
     - addlance.com
     - prontopro.it
     - edilnet.it
+    - jifu.com
+    - fiverr.com
+    - ferryscanner.com
   public_sector:
+    - aslnapoli1centro.it
+    - opensoldipubblici.it
+    - agenziademanio.it
+    - aslnapoli2nord.it
+    - enti33.it
+    - istruzione.it
+    - fnofi.it
+    - campania.it
+    - regionecampania.it
+    - soresa.it
+    - soluzionipa.it
+    - poliziadistato.it
+    - tuttogare.it
     - senato.it
     - comuni-italiani.it
     - italia.it
@@ -60,9 +112,57 @@ excluded_domains:
     - na.it
   social:
     - instagram.com
+  education:
+    - uniroma1.it
+    - edu.it
+    - indire.it
+    - cnr.it
+    - icreginacoeli.it
+    - cerchiamodocenti.it
+    - corsidia.org
+    - younipa.it
+  media:
+    - ildispariquotidiano.it
+    - calcionapoli1926.it
+    - primocittadino.it
+    - campanialive.it
+    - torinotoday.it
+    - napolirunning.com
+    - italia-mia.it
+    - napolivillage.com
+    - ilfattovesuviano.it
+    - italianinsider.it
+    - ilprocidano.it
+    - fanpage.it
+    - sciscianonotizie.it
+  analytics_tool:
+    - similarweb.com
+  bank_finance:
+    - aon.com
+  non_target_big_corporate:
+    - apple.com
+    - windtre-store.it
   intermediary:
     - simplyhired.com
     - jobillico.com
     - recruit.net
   non_employer:
+    - bolletta-acqua.it
+    - gazzettaamministrativa.it
+    - traspare.com
+    - trasparenzatari.it
+    - sorrentotouristoffice.com
+    - elementarypos.com
+    - intraprendere.net
+    - easy-quizzz.com
+    - oseucredito.com
+    - corepassager.com
+    - movemycursor.com
+    - eremobetania.it
+    - mmpa.store
+    - smartworkersunion.it
+    - nomadidigitali.it
+    - lavorarenelmondo.it
+    - cashxflow.com
+    - wikipedia.org
     - fibercallcenter.com
