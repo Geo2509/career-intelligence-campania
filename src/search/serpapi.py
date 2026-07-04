@@ -40,6 +40,8 @@ class SerpApiSearchClient:
                         "engine": "google",
                         "q": query,
                         "api_key": api_key,
+                        # SerpAPI/Google defaults to about 10 organic results; SearchManager
+                        # passes the configured limit here and we slice to the same ceiling below.
                         "num": max_results,
                         "gl": "it",
                         "hl": "it",

@@ -97,6 +97,28 @@ def test_all_engines_uses_duckduckgo_and_serpapi_when_key_exists(tmp_path: Path,
     assert [client.name for client, _ in clients] == ["duckduckgo", "serpapi"]
 
 
+def test_serpapi_limit_config_controls_result_limit(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SERPAPI_API_KEY", "test-key")
+    config = tmp_path / "search_engines.yaml"
+    config.write_text(
+        "engines:\n"
+        "  duckduckgo:\n"
+        "    enabled: true\n"
+        "    max_results: 5\n"
+        "  serpapi:\n"
+        "    enabled: true\n"
+        "    limit: 7\n"
+        "    max_results: 20\n"
+        "    api_key_env: SERPAPI_API_KEY\n"
+        "cache:\n"
+        "  enabled: false\n"
+    )
+
+    clients = load_search_clients(config, engine="serpapi")
+
+    assert [(client.name, limit) for client, limit in clients] == [("serpapi", 7)]
+
+
 def test_search_manager_uses_only_requested_duckduckgo_engine() -> None:
     duckduckgo = RecordingClient("duckduckgo")
     serpapi = RecordingClient("serpapi")

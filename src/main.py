@@ -26,6 +26,11 @@ from .discovery_optimization import (
     write_discovery_recommendations,
     write_query_performance_report,
 )
+from .engine_contribution import (
+    build_engine_contribution_report,
+    print_engine_contribution_report,
+    write_engine_contribution_report,
+)
 from .engine_performance import (
     build_engine_performance_report,
     print_engine_report,
@@ -228,6 +233,13 @@ def run(
         final_companies=with_history,
     )
     write_engine_performance_report(engine_report)
+    engine_contribution_report = build_engine_contribution_report(
+        raw_results=raw_results,
+        after_filter_companies=after_filter_companies,
+        final_companies=with_history,
+        profiled_domains=profiled_domains,
+    )
+    write_engine_contribution_report(engine_contribution_report)
     current_strategy_ranking = build_strategy_ranking(strategy_report)
     query_performance = build_query_performance_report(
         all_queries=all_queries,
@@ -629,6 +641,11 @@ def main() -> None:
         help="Print search engine performance after the run.",
     )
     parser.add_argument(
+        "--engine-contribution-report",
+        action="store_true",
+        help="Print search engine overlap and unique contribution after the run.",
+    )
+    parser.add_argument(
         "--validation-report",
         action="store_true",
         help="Print validation quality summary after the run.",
@@ -679,6 +696,11 @@ def main() -> None:
         if report_path.exists():
             print("")
             print_engine_report(json.loads(report_path.read_text()))
+    if args.engine_contribution_report:
+        report_path = Path("output/engine_contribution.json")
+        if report_path.exists():
+            print("")
+            print_engine_contribution_report(json.loads(report_path.read_text()))
     if args.validation_report:
         report_path = Path("output/validation_report.json")
         if report_path.exists():

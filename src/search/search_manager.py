@@ -45,7 +45,7 @@ def load_search_clients(config_path: str | Path, engine: str = "duckduckgo") -> 
                     timeout=int(duckduckgo.get("timeout", 20)),
                     rate_limit_seconds=float(duckduckgo.get("rate_limit_seconds", 1.0)),
                 ),
-                int(duckduckgo.get("max_results", 10)),
+                _configured_limit(duckduckgo),
             )
         )
 
@@ -61,7 +61,7 @@ def load_search_clients(config_path: str | Path, engine: str = "duckduckgo") -> 
                     timeout=int(serpapi.get("timeout", 20)),
                     rate_limit_seconds=float(serpapi.get("rate_limit_seconds", 0.5)),
                 ),
-                int(serpapi.get("max_results", 10)),
+                _configured_limit(serpapi),
             )
         )
     elif "serpapi" in requested and not serpapi_available:
@@ -78,7 +78,7 @@ def load_search_clients(config_path: str | Path, engine: str = "duckduckgo") -> 
                         timeout=int(duckduckgo.get("timeout", 20)),
                         rate_limit_seconds=float(duckduckgo.get("rate_limit_seconds", 1.0)),
                     ),
-                    int(duckduckgo.get("max_results", 10)),
+                    _configured_limit(duckduckgo),
                 )
             )
 
@@ -192,6 +192,10 @@ def load_environment() -> None:
             os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
         return
     load_dotenv(dotenv_path=Path(".env"))
+
+
+def _configured_limit(engine_config: dict) -> int:
+    return int(engine_config.get("limit", engine_config.get("max_results", 10)))
 
 
 def _selected_engines(engine: str) -> set[str]:
