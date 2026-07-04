@@ -2,7 +2,9 @@ from pathlib import Path
 
 from src.dedupe import dedupe_companies
 from src.engine_performance import build_engine_performance_report, print_engine_report
+from src.query_generator import DiscoveryQuery
 from src.search.base import SearchResult, SearchStats
+from src.search.cache import SearchCache
 from src.search.search_manager import SearchManager, load_search_clients
 
 
@@ -33,11 +35,26 @@ def test_engine_selection_defaults_to_duckduckgo(tmp_path: Path, monkeypatch) ->
 
 def test_serpapi_missing_api_key_falls_back_to_duckduckgo(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
     config = _search_config(tmp_path / "search_engines.yaml")
 
     clients = load_search_clients(config, engine="serpapi")
 
     assert [client.name for client, _ in clients] == ["duckduckgo"]
+
+
+def test_serpapi_missing_api_key_warns_before_duckduckgo_fallback(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    config = _search_config(tmp_path / "search_engines.yaml")
+
+    load_search_clients(config, engine="serpapi")
+
+    assert "Warning: SERPAPI_API_KEY is not set" in capsys.readouterr().err
 
 
 def test_serpapi_selected_when_api_key_exists(tmp_path: Path, monkeypatch) -> None:
@@ -49,13 +66,121 @@ def test_serpapi_selected_when_api_key_exists(tmp_path: Path, monkeypatch) -> No
     assert [client.name for client, _ in clients] == ["serpapi"]
 
 
+def test_serpapi_api_key_is_loaded_from_dotenv(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("SERPAPI_API_KEY=test-key\n")
+    config = _search_config(tmp_path / "search_engines.yaml")
+
+    clients = load_search_clients(config, engine="serpapi")
+
+    assert [client.name for client, _ in clients] == ["serpapi"]
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+
+
 def test_all_engines_skips_serpapi_without_key(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
     config = _search_config(tmp_path / "search_engines.yaml")
 
     clients = load_search_clients(config, engine="all")
 
     assert [client.name for client, _ in clients] == ["duckduckgo"]
+
+
+def test_all_engines_uses_duckduckgo_and_serpapi_when_key_exists(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SERPAPI_API_KEY", "test-key")
+    config = _search_config(tmp_path / "search_engines.yaml")
+
+    clients = load_search_clients(config, engine="all")
+
+    assert [client.name for client, _ in clients] == ["duckduckgo", "serpapi"]
+
+
+def test_search_manager_uses_only_requested_duckduckgo_engine() -> None:
+    duckduckgo = RecordingClient("duckduckgo")
+    serpapi = RecordingClient("serpapi")
+
+    run = SearchManager([(duckduckgo, 10)], cache=None).run(["data entry Napoli"])
+
+    assert duckduckgo.calls == ["data entry Napoli"]
+    assert serpapi.calls == []
+    assert run.stats.ddg_results == 1
+    assert run.stats.serpapi_results == 0
+
+
+def test_search_manager_uses_only_requested_serpapi_engine() -> None:
+    duckduckgo = RecordingClient("duckduckgo")
+    serpapi = RecordingClient("serpapi")
+    progress: list[str] = []
+
+    run = SearchManager([(serpapi, 10)], cache=None).run(["data entry Napoli"], progress=progress.append)
+
+    assert duckduckgo.calls == []
+    assert serpapi.calls == ["data entry Napoli"]
+    assert run.stats.ddg_results == 0
+    assert run.stats.serpapi_results == 1
+    assert any("SerpAPI: 1 results" in line for line in progress)
+    assert not any("DDG:" in line for line in progress)
+
+
+def test_search_manager_uses_both_engines_for_all_selection() -> None:
+    duckduckgo = RecordingClient("duckduckgo")
+    serpapi = RecordingClient("serpapi")
+
+    run = SearchManager([(duckduckgo, 10), (serpapi, 10)], cache=None).run(["data entry Napoli"])
+
+    assert duckduckgo.calls == ["data entry Napoli"]
+    assert serpapi.calls == ["data entry Napoli"]
+    assert run.stats.ddg_results == 1
+    assert run.stats.serpapi_results == 1
+    assert run.stats.queries_executed == 2
+
+
+def test_duckduckgo_cache_is_not_reused_for_serpapi_run(tmp_path: Path) -> None:
+    cache = SearchCache(tmp_path / "search_results.json", enabled=True, discovery_hash="hash")
+    cache.set(
+        "data entry Napoli",
+        "duckduckgo",
+        [
+            SearchResult(
+                query="data entry Napoli",
+                title="DDG result",
+                url="https://ddg.example",
+                source="duckduckgo",
+                strategy="direct",
+            )
+        ],
+        strategy="direct",
+    )
+    serpapi = RecordingClient("serpapi")
+
+    run = SearchManager([(serpapi, 10)], cache=cache).run(
+        [DiscoveryQuery(query="data entry Napoli", strategy="direct")]
+    )
+
+    assert serpapi.calls == ["data entry Napoli"]
+    assert run.stats.cache_hits == 0
+    assert run.stats.serpapi_results == 1
+    assert run.results[0].source == "serpapi"
+
+
+class RecordingClient:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.calls: list[str] = []
+        self.last_error = ""
+
+    def search(self, query: str, max_results: int = 10):
+        self.calls.append(query)
+        return [
+            SearchResult(
+                query=query,
+                title=f"{self.name} result",
+                url=f"https://{self.name}.example",
+                source=self.name,
+            )
+        ]
 
 
 def test_search_manager_records_engine_statistics() -> None:

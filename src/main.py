@@ -46,6 +46,7 @@ from .strategy_performance import (
 )
 from .validation import build_validation_report, print_validation_report, write_validation_report
 from .website_profiler import profile_website
+from .website_classifier import classify_company
 
 
 @dataclass
@@ -79,6 +80,25 @@ class RunStats:
     skipped_reason_counts: dict[str, int] | None = None
     profile_time_total: float = 0.0
     profile_time_average: float = 0.0
+    # website type statistics
+    website_type_company: int = 0
+    website_type_staffing_agency: int = 0
+    website_type_job_board: int = 0
+    website_type_directory: int = 0
+    website_type_marketplace: int = 0
+    website_type_government: int = 0
+    website_type_municipality: int = 0
+    website_type_education: int = 0
+    website_type_university: int = 0
+    website_type_school: int = 0
+    website_type_media: int = 0
+    website_type_news: int = 0
+    website_type_blog: int = 0
+    website_type_association: int = 0
+    website_type_nonprofit: int = 0
+    website_type_healthcare: int = 0
+    website_type_unknown: int = 0
+    skipped_website_type: int = 0
 
 
 def load_negative_keywords(path: str = "configs/negative_keywords.yaml") -> list[str]:
@@ -135,6 +155,15 @@ def run(
     log(progress, "Deduplicating companies...")
     companies = dedupe_companies(companies)
     companies = filter_valid_employers(companies, allow_unconfirmed=True)
+    # Classify website type before profiling to avoid profiling non-employer sites
+    for c in companies:
+        wtype, wconf, wreasons = classify_company(c)
+        c["website_type"] = wtype
+        c["website_type_confidence"] = wconf
+        c["website_type_score"] = wconf
+        c["website_type_reasons"] = wreasons
+    # Compute website type stats snapshot (counts)
+    website_types = [c.get("website_type", "unknown") for c in companies]
     log(progress, f"Unique companies: {len(companies)}")
 
     if profile:
@@ -212,7 +241,7 @@ def run(
     log(progress, "Done.")
     run_stats = RunStats(
         queries_generated=len(all_queries),
-        queries_executed=len(executed_queries),
+        queries_executed=search_stats.queries_executed,
         raw_results=len(raw_results),
         after_aggregator_filter=after_filter,
         unique_companies=len(companies),
@@ -240,11 +269,29 @@ def run(
         skipped_reason_counts=skipped_reason_counts,
         profile_time_total=profile_time_total,
         profile_time_average=profile_time_average,
+        website_type_company=sum(1 for t in website_types if t == "company"),
+        website_type_staffing_agency=sum(1 for t in website_types if t == "staffing_agency"),
+        website_type_job_board=sum(1 for t in website_types if t == "job_board"),
+        website_type_directory=sum(1 for t in website_types if t == "directory"),
+        website_type_marketplace=sum(1 for t in website_types if t == "marketplace"),
+        website_type_government=sum(1 for t in website_types if t == "government"),
+        website_type_municipality=sum(1 for t in website_types if t == "municipality"),
+        website_type_education=sum(1 for t in website_types if t == "education"),
+        website_type_university=sum(1 for t in website_types if t == "university"),
+        website_type_school=sum(1 for t in website_types if t == "school"),
+        website_type_media=sum(1 for t in website_types if t == "media"),
+        website_type_news=sum(1 for t in website_types if t == "news"),
+        website_type_blog=sum(1 for t in website_types if t == "blog"),
+        website_type_association=sum(1 for t in website_types if t == "association"),
+        website_type_nonprofit=sum(1 for t in website_types if t == "nonprofit"),
+        website_type_healthcare=sum(1 for t in website_types if t == "healthcare"),
+        website_type_unknown=sum(1 for t in website_types if not t or t == "unknown"),
+        skipped_website_type=0,
     )
 
     run_metadata = {
         "generated_queries": len(all_queries),
-        "executed_queries": len(executed_queries),
+        "executed_queries": search_stats.queries_executed,
         "cached_queries": search_stats.cached_queries,
         "live_queries": search_stats.live_queries,
         "cache_hits": search_stats.cache_hits,
@@ -354,7 +401,8 @@ def audit_cache(
 
     current_queries = {query.query for query in generate_queries(discovery_path=discovery_path)[0]}
     for key in records:
-        query = key.split("::", 1)[1] if "::" in key else key
+        parts = key.split("::", 2)
+        query = parts[-1] if len(parts) > 1 else key
         if query not in current_queries:
             queries_not_matching_current.append(query)
 
@@ -413,6 +461,27 @@ def profile_skip_reason(
     excluded_type = excluded_domain_type(company.get("domain", ""), excluded_classes or load_excluded_domain_classes())
     if excluded_type:
         return f"skipped_{excluded_type}"
+    # Skip based on website type classification
+    wtype = (company.get("website_type") or "").lower()
+    if wtype == "staffing_agency":
+        return "skipped_staffing_agency"
+    if wtype in {
+        "job_board",
+        "directory",
+        "marketplace",
+        "government",
+        "municipality",
+        "education",
+        "university",
+        "school",
+        "media",
+        "news",
+        "blog",
+        "association",
+        "nonprofit",
+        "healthcare",
+    }:
+        return "skipped_website_type"
     if profile_only_qualified and company.get("qualification") in {"Low Match", "Not Relevant"}:
         return "not_qualified"
     if not weak_employer_evidence(company):

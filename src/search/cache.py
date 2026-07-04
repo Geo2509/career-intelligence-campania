@@ -7,7 +7,7 @@ from pathlib import Path
 from .base import SearchResult, utc_now
 
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 class SearchCache:
@@ -45,14 +45,18 @@ class SearchCache:
             return {str(key): value for key, value in records.items() if isinstance(value, list)}
         return {}
 
-    def _key(self, query: str, engine: str) -> str:
-        return f"{engine}::{query}"
+    def _key(self, query: str, engine: str, strategy: str = "") -> str:
+        return f"{engine}::{strategy}::{query}"
 
-    def get(self, query: str, engine: str) -> list[SearchResult] | None:
+    def get(self, query: str, engine: str, strategy: str = "") -> list[SearchResult] | None:
         if not self.enabled:
             return None
-        records = self._records.get(self._key(query, engine))
+        records = self._records.get(self._key(query, engine, strategy))
         if not records:
+            return None
+        if records[0].get("search_engine", records[0].get("engine", engine)) != engine:
+            return None
+        if records[0].get("strategy", "") != strategy:
             return None
         timestamp = records[0].get("timestamp", "")
         try:
@@ -69,21 +73,22 @@ class SearchCache:
                 title=record.get("title", ""),
                 url=record.get("url", ""),
                 snippet=record.get("snippet", ""),
-                source=record.get("engine", engine),
+                source=record.get("search_engine", record.get("engine", engine)),
                 strategy=record.get("strategy", ""),
                 timestamp=record.get("timestamp", timestamp),
             )
             for record in records
         ]
 
-    def set(self, query: str, engine: str, results: list[SearchResult]) -> None:
+    def set(self, query: str, engine: str, results: list[SearchResult], strategy: str = "") -> None:
         if not self.enabled:
             return
         timestamp = utc_now()
-        self._records[self._key(query, engine)] = [
+        self._records[self._key(query, engine, strategy)] = [
             {
                 "query": result.query,
                 "engine": engine,
+                "search_engine": engine,
                 "strategy": result.strategy,
                 "title": result.title,
                 "url": result.url,

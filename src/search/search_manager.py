@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
+import sys
 from typing import Callable
 
 import yaml
@@ -29,6 +30,7 @@ def load_search_config(config_path: str | Path) -> dict:
 
 
 def load_search_clients(config_path: str | Path, engine: str = "duckduckgo") -> list[tuple[SearchClient, int]]:
+    load_environment()
     config = load_search_config(config_path)
     engines = config.get("engines", {})
     clients: list[tuple[SearchClient, int]] = []
@@ -62,10 +64,13 @@ def load_search_clients(config_path: str | Path, engine: str = "duckduckgo") -> 
                 int(serpapi.get("max_results", 10)),
             )
         )
-
-    if not clients and "duckduckgo" not in requested:
+    elif "serpapi" in requested and not serpapi_available:
+        print(
+            f"Warning: {serpapi_key_env} is not set; SerpAPI is unavailable. Falling back to DuckDuckGo.",
+            file=sys.stderr,
+        )
         duckduckgo = engines.get("duckduckgo", {})
-        if duckduckgo.get("enabled", True):
+        if not clients and duckduckgo.get("enabled", True):
             clients.append(
                 (
                     DuckDuckGoSearchClient(
@@ -108,7 +113,7 @@ class SearchManager:
                 stats.record_engine_query(client.name)
                 stats.query_results.setdefault(query_text, 0)
                 stats.query_strategy_map[query_text] = strategy
-                cached = self.cache.get(query_text, client.name) if self.cache else None
+                cached = self.cache.get(query_text, client.name, strategy=strategy) if self.cache else None
                 if cached is not None:
                     stats.record_cache_hit(strategy)
                     stats.record_strategy_executed(strategy)
@@ -145,7 +150,7 @@ class SearchManager:
                 stats.record_strategy_result(strategy, len(engine_results))
                 results.extend(engine_results)
                 if self.cache is not None:
-                    self.cache.set(query_text, client.name, engine_results)
+                    self.cache.set(query_text, client.name, engine_results, strategy=strategy)
 
         if self.cache is not None:
             self.cache.save()
@@ -170,6 +175,23 @@ def engine_label(name: str) -> str:
         "serpapi": "SerpAPI",
     }
     return labels.get(name, name)
+
+
+def load_environment() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        env_path = Path(".env")
+        if not env_path.exists():
+            return
+        for raw_line in env_path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+        return
+    load_dotenv(dotenv_path=Path(".env"))
 
 
 def _selected_engines(engine: str) -> set[str]:
