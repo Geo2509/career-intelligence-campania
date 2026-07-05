@@ -27,6 +27,9 @@ EXPORT_COLUMNS = [
     "LinkedIn",
     "Facebook",
     "Qualification",
+    "Employer Priority Score",
+    "Employer Priority Reasons",
+    "Employer Priority Confidence",
     "Score",
     "Confidence",
     "Discovery Confidence",
@@ -34,6 +37,11 @@ EXPORT_COLUMNS = [
     "Website Type",
     "Website Type Confidence",
     "Website Type Reasons",
+    "Website Type Initial",
+    "Website Type Initial Confidence",
+    "Website Type Final",
+    "Website Type Final Confidence",
+    "Website Type Final Reasons",
     "Discovery Strategy",
     "Original Query",
     "Search Engine",
@@ -84,6 +92,9 @@ def records_to_export_rows(records: list[dict]) -> list[dict]:
                 "LinkedIn": record.get("linkedin", ""),
                 "Facebook": record.get("facebook", ""),
                 "Qualification": record.get("qualification", ""),
+                "Employer Priority Score": record.get("employer_priority_score", 0),
+                "Employer Priority Reasons": _join(record.get("employer_priority_reasons")),
+                "Employer Priority Confidence": record.get("employer_priority_confidence", 0),
                 "Score": record.get("score", 0),
                 "Confidence": record.get("confidence", 0),
                 "Discovery Confidence": record.get("discovery_confidence", 0),
@@ -92,6 +103,17 @@ def records_to_export_rows(records: list[dict]) -> list[dict]:
                 "Website Type Confidence": record.get("website_type_confidence", record.get("website_type_score", "")),
                 "Website Type Reasons": _join(record.get("website_type_reasons", []) or record.get("website_type_reasons", [])),
                 "Website Type Score": record.get("website_type_score", ""),
+                "Website Type Initial": record.get("website_type_initial", record.get("website_type", "")),
+                "Website Type Initial Confidence": record.get(
+                    "website_type_initial_confidence",
+                    record.get("website_type_confidence", record.get("website_type_score", "")),
+                ),
+                "Website Type Final": record.get("website_type_final", record.get("website_type", "")),
+                "Website Type Final Confidence": record.get(
+                    "website_type_final_confidence",
+                    record.get("website_type_confidence", record.get("website_type_score", "")),
+                ),
+                "Website Type Final Reasons": _join(record.get("website_type_final_reasons", record.get("website_type_reasons", []))),
                 "Discovery Strategy": _join(record.get("strategies") or [record.get("strategy", "")]),
                 "Original Query": _first(record.get("queries")),
                 "Search Engine": _join(record.get("engines")),
@@ -116,7 +138,16 @@ def export_records(records: list[dict], output_base: str = "output/companies") -
     xlsx_path = base.with_suffix(".xlsx")
 
     json_path.write_text(json.dumps(records, ensure_ascii=False, indent=2))
-    frame = pd.DataFrame(records_to_export_rows(records), columns=EXPORT_COLUMNS)
+    rows = sorted(
+        records_to_export_rows(records),
+        key=lambda row: (
+            int(row.get("Employer Priority Score", 0) or 0),
+            int(row.get("Score", 0) or 0),
+            int(row.get("Confidence", 0) or 0),
+        ),
+        reverse=True,
+    )
+    frame = pd.DataFrame(rows, columns=EXPORT_COLUMNS)
     frame.to_csv(csv_path, index=False)
     with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
         frame.to_excel(writer, sheet_name="Targets", index=False)

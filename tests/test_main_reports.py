@@ -71,6 +71,10 @@ def test_run_metadata_written(tmp_path: Path, monkeypatch):
     assert engine_path.exists()
     engine_report = json.loads(engine_path.read_text())
     assert "engines" in engine_report
+    export_filter_path = Path("output/export_filter_report.json")
+    assert export_filter_path.exists()
+    export_filter_report = json.loads(export_filter_path.read_text())
+    assert "removed_domains" in export_filter_report
     validation_path = Path("output/validation_report.json")
     assert validation_path.exists()
     validation_report = json.loads(validation_path.read_text())

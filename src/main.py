@@ -39,6 +39,7 @@ from .engine_performance import (
 from .employer_intelligence import enrich_companies
 from .employer_validator import filter_valid_employers, validate_employer
 from .export import export_records
+from .export_filter import apply_final_export_filter, write_export_filter_report
 from .history import update_history
 from .query_generator import build_discovery_hash, generate_queries
 from .scorer import score_companies
@@ -51,7 +52,7 @@ from .strategy_performance import (
 )
 from .validation import build_validation_report, print_validation_report, write_validation_report
 from .website_profiler import profile_website
-from .website_classifier import classify_company
+from .website_classifier import classify_company, post_profile_reclassify_companies
 
 
 @dataclass
@@ -104,6 +105,27 @@ class RunStats:
     website_type_healthcare: int = 0
     website_type_unknown: int = 0
     skipped_website_type: int = 0
+    post_reclassified_count: int = 0
+    post_reclassified_to_staffing_agency: int = 0
+    post_reclassified_to_job_board: int = 0
+    post_reclassified_to_directory: int = 0
+    post_reclassified_to_public_sector: int = 0
+    post_reclassified_to_media: int = 0
+    post_reclassified_to_non_employer: int = 0
+    send_cv_removed_by_reclassification: int = 0
+    priority_80_plus: int = 0
+    priority_60_79: int = 0
+    priority_40_59: int = 0
+    priority_below_40: int = 0
+    average_priority: float = 0.0
+    top_priority_employer: str = ""
+    removed_by_export_filter: int = 0
+    removed_social_media: int = 0
+    removed_reviews: int = 0
+    removed_travel: int = 0
+    removed_platforms: int = 0
+    removed_non_employers: int = 0
+    removed_blacklist: int = 0
 
 
 def load_negative_keywords(path: str = "configs/negative_keywords.yaml") -> list[str]:
@@ -167,6 +189,11 @@ def run(
         c["website_type_confidence"] = wconf
         c["website_type_score"] = wconf
         c["website_type_reasons"] = wreasons
+        c["website_type_initial"] = wtype
+        c["website_type_initial_confidence"] = wconf
+        c["website_type_final"] = wtype
+        c["website_type_final_confidence"] = wconf
+        c["website_type_final_reasons"] = wreasons
     # Compute website type stats snapshot (counts)
     website_types = [c.get("website_type", "unknown") for c in companies]
     log(progress, f"Unique companies: {len(companies)}")
@@ -215,9 +242,16 @@ def run(
 
     log(progress, "Analysing employer intelligence...")
     companies = enrich_companies(companies)
+    log(progress, "Reclassifying websites with post-profile evidence...")
+    companies, post_reclassification_stats = post_profile_reclassify_companies(companies)
+    website_types = [c.get("website_type", "unknown") for c in companies]
     log(progress, "Scoring companies...")
     scored = score_companies(companies)
-    with_history = update_history(scored, history_path)
+    log(progress, "Applying final export filter...")
+    filtered_companies, export_filter_report = apply_final_export_filter(scored)
+    write_export_filter_report(export_filter_report)
+    with_history = update_history(filtered_companies, history_path)
+    priority_scores = [int(company.get("employer_priority_score", 0) or 0) for company in with_history]
     strategy_report = build_strategy_performance_report(
         all_queries=all_queries,
         search_stats=search_stats,
@@ -256,7 +290,7 @@ def run(
         queries_executed=search_stats.queries_executed,
         raw_results=len(raw_results),
         after_aggregator_filter=after_filter,
-        unique_companies=len(companies),
+        unique_companies=len(with_history),
         profiled_companies=profiled_count,
         emails_found=sum(1 for company in with_history if company.get("emails")),
         career_pages_found=sum(1 for company in with_history if company.get("has_careers_page")),
@@ -269,15 +303,15 @@ def run(
         cache_misses=search_stats.cache_misses,
         queries_by_strategy=search_stats.queries_by_strategy,
         results_by_strategy=search_stats.results_by_strategy,
-        companies_analysed=len(companies),
-        industries_detected=sum(1 for company in companies if company.get("industry") and company.get("industry") != "Unknown"),
-        logistics_companies=sum(1 for company in companies if company.get("logistics_score", 0) > 0),
-        back_office_companies=sum(1 for company in companies if "Back Office" in company.get("office_signals", [])),
-        hr_emails_found=sum(1 for company in companies if company.get("hr_email")),
-        excellent_matches=sum(1 for company in companies if company.get("qualification") == "Excellent Match"),
-        good_matches=sum(1 for company in companies if company.get("qualification") == "Good Match"),
-        ignored_companies=sum(1 for company in companies if company.get("next_action") == "Ignore"),
-        skipped_before_profiling=len(companies) - profiled_count,
+        companies_analysed=len(with_history),
+        industries_detected=sum(1 for company in with_history if company.get("industry") and company.get("industry") != "Unknown"),
+        logistics_companies=sum(1 for company in with_history if company.get("logistics_score", 0) > 0),
+        back_office_companies=sum(1 for company in with_history if "Back Office" in company.get("office_signals", [])),
+        hr_emails_found=sum(1 for company in with_history if company.get("hr_email")),
+        excellent_matches=sum(1 for company in with_history if company.get("qualification") == "Excellent Match"),
+        good_matches=sum(1 for company in with_history if company.get("qualification") == "Good Match"),
+        ignored_companies=sum(1 for company in with_history if company.get("next_action") == "Ignore"),
+        skipped_before_profiling=len(with_history) - profiled_count,
         skipped_reason_counts=skipped_reason_counts,
         profile_time_total=profile_time_total,
         profile_time_average=profile_time_average,
@@ -299,6 +333,27 @@ def run(
         website_type_healthcare=sum(1 for t in website_types if t == "healthcare"),
         website_type_unknown=sum(1 for t in website_types if not t or t == "unknown"),
         skipped_website_type=0,
+        post_reclassified_count=post_reclassification_stats["post_reclassified_count"],
+        post_reclassified_to_staffing_agency=post_reclassification_stats["post_reclassified_to_staffing_agency"],
+        post_reclassified_to_job_board=post_reclassification_stats["post_reclassified_to_job_board"],
+        post_reclassified_to_directory=post_reclassification_stats["post_reclassified_to_directory"],
+        post_reclassified_to_public_sector=post_reclassification_stats["post_reclassified_to_public_sector"],
+        post_reclassified_to_media=post_reclassification_stats["post_reclassified_to_media"],
+        post_reclassified_to_non_employer=post_reclassification_stats["post_reclassified_to_non_employer"],
+        send_cv_removed_by_reclassification=post_reclassification_stats["send_cv_removed_by_reclassification"],
+        priority_80_plus=sum(1 for score in priority_scores if score >= 80),
+        priority_60_79=sum(1 for score in priority_scores if 60 <= score <= 79),
+        priority_40_59=sum(1 for score in priority_scores if 40 <= score <= 59),
+        priority_below_40=sum(1 for score in priority_scores if score < 40),
+        average_priority=round(sum(priority_scores) / len(priority_scores), 2) if priority_scores else 0.0,
+        top_priority_employer=with_history[0].get("company", "") if with_history else "",
+        removed_by_export_filter=export_filter_report["removed_by_export_filter"],
+        removed_social_media=export_filter_report["removed_social_media"],
+        removed_reviews=export_filter_report["removed_reviews"],
+        removed_travel=export_filter_report["removed_travel"],
+        removed_platforms=export_filter_report["removed_platforms"],
+        removed_non_employers=export_filter_report["removed_non_employers"],
+        removed_blacklist=export_filter_report["removed_blacklist"],
     )
 
     run_metadata = {
@@ -591,6 +646,27 @@ def print_run_stats(stats: RunStats) -> None:
     print(f"Skipped reason counts: {stats.skipped_reason_counts or {}}")
     print(f"Profile time total: {stats.profile_time_total}s")
     print(f"Profile time average: {stats.profile_time_average}s")
+    print(f"Post-profile reclassified: {stats.post_reclassified_count}")
+    print(f"Post-profile staffing agencies: {stats.post_reclassified_to_staffing_agency}")
+    print(f"Post-profile job boards: {stats.post_reclassified_to_job_board}")
+    print(f"Post-profile directories: {stats.post_reclassified_to_directory}")
+    print(f"Post-profile public sector: {stats.post_reclassified_to_public_sector}")
+    print(f"Post-profile media: {stats.post_reclassified_to_media}")
+    print(f"Post-profile non-employers: {stats.post_reclassified_to_non_employer}")
+    print(f"Send CV removed by reclassification: {stats.send_cv_removed_by_reclassification}")
+    print(f"Priority >=80: {stats.priority_80_plus}")
+    print(f"Priority 60-79: {stats.priority_60_79}")
+    print(f"Priority 40-59: {stats.priority_40_59}")
+    print(f"Priority <40: {stats.priority_below_40}")
+    print(f"Average priority: {stats.average_priority}")
+    print(f"Top priority employer: {stats.top_priority_employer}")
+    print(f"Removed by export filter: {stats.removed_by_export_filter}")
+    print(f"Removed social media: {stats.removed_social_media}")
+    print(f"Removed reviews: {stats.removed_reviews}")
+    print(f"Removed travel: {stats.removed_travel}")
+    print(f"Removed platforms: {stats.removed_platforms}")
+    print(f"Removed non-employers: {stats.removed_non_employers}")
+    print(f"Removed blacklist: {stats.removed_blacklist}")
 
 
 def main() -> None:
